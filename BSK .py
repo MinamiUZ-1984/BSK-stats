@@ -1,107 +1,133 @@
 import streamlit as st
 import pandas as pd
 
-st.set_page_config(page_title="バスケ分析レポート", layout="wide")
+st.set_page_config(page_title="バスケ分析レポートPro", layout="wide")
 
-# --- データ管理 ---
+# --- 1. データ保持の設定 ---
 if 'history' not in st.session_state:
-    st.session_state.history = pd.DataFrame(columns=['Q', '名前', '項目', 'エリア', '結果', '点数'])
-if 'current_q' not in st.session_state:
-    st.session_state.current_q = "1Q"
+    st.session_state.history = pd.DataFrame(columns=['Q', 'チーム', '名前', '項目', '結果', '点数'])
 
-PLAYERS = [f"{i}番" for i in range(1, 21)]
+# --- 2. サイドバー：試合基本情報 ---
+with st.sidebar:
+    st.header("📋 試合基本情報")
+    game_date = st.date_input("試合日")
+    home_name = st.text_input("自チーム名", "My Team")
+    away_name = st.text_input("相手チーム名", "Opponent")
+    
+    st.divider()
+    if st.button("試合データをすべて消去", type="secondary"):
+        st.session_state.history = pd.DataFrame(columns=['Q', 'チーム', '名前', '項目', '結果', '点数'])
+        st.rerun()
 
-def record(item, name=None, area="-", result="成功", pts=0):
-    p_name = name if name else st.session_state.selected_player
-    new_data = pd.DataFrame([{'Q': st.session_state.current_q, '名前': p_name, '項目': item, 'エリア': area, '結果': result, '点数': pts}])
-    st.session_state.history = pd.concat([st.session_state.history, new_data], ignore_index=True)
-    st.toast(f"記録完了: {p_name}")
-
-# --- メインナビゲーション ---
-tab_input, tab_report = st.tabs(["✍️ 記録入力", "📋 試合レポート発行"])
+# --- 3. メイン画面のタブ構成 ---
+tab_input, tab_report = st.tabs(["✍️ リアルタイム記録", "📄 試合分析レポート発行"])
 
 # --- 【タブ1】記録入力画面 ---
 with tab_input:
-    st.session_state.current_q = st.radio("クォーター", ["1Q", "2Q", "3Q", "4Q", "OT"], horizontal=True, key="q_radio")
-    
-    if st.button("⏱️ 24秒バイオレーション", use_container_width=True):
-        record("24秒バイオ", name="TEAM", result="TO")
+    col_q, col_t = st.columns(2)
+    with col_q:
+        current_q = st.radio("クォーター", ["1Q", "2Q", "3Q", "4Q", "OT"], horizontal=True)
+    with col_t:
+        current_team = st.radio("記録するチーム", [home_name, away_name], horizontal=True)
 
-    st.write("### 選手を選択")
+    st.divider()
+    
+    # 選手選択（20名分）
+    players = [f"{i}番" for i in range(1, 21)]
     p_cols = st.columns(5)
-    for i, p in enumerate(PLAYERS):
+    for i, p in enumerate(players):
         with p_cols[i % 5]:
-            if st.button(p, key=f"p_{p}", use_container_width=True):
+            if st.button(p, key=f"p_{current_team}_{p}", use_container_width=True):
                 st.session_state.selected_player = p
 
     if 'selected_player' in st.session_state:
-        st.info(f"選択中: {st.session_state.selected_player}番")
+        st.subheader(f"記録中: {current_team} - {st.session_state.selected_player}")
+        
+        def quick_record(item, res, pts):
+            data = pd.DataFrame([{'Q': current_q, 'チーム': current_team, '名前': st.session_state.selected_player, '項目': item, '結果': res, '点数': pts}])
+            st.session_state.history = pd.concat([st.session_state.history, data], ignore_index=True)
+            st.toast(f"{item} {res}")
+
         c1, c2, c3 = st.columns(3)
         with c1:
-            if st.button("🏀 2P成功", use_container_width=True, type="primary"): record("2P", result="成功", pts=2)
-            if st.button("🎯 3P成功", use_container_width=True, type="primary"): record("3P", result="成功", pts=3)
+            if st.button("🏀 2P成功", use_container_width=True, type="primary"): quick_record("2P", "成功", 2)
+            if st.button("❌ 2P失敗", use_container_width=True): quick_record("2P", "失敗", 0)
         with c2:
-            if st.button("❌ 2P失敗", use_container_width=True): record("2P", result="失敗")
-            if st.button("❌ 3P失敗", use_container_width=True): record("3P", result="失敗")
+            if st.button("🎯 3P成功", use_container_width=True, type="primary"): quick_record("3P", "成功", 3)
+            if st.button("❌ 3P失敗", use_container_width=True): quick_record("3P", "失敗", 0)
         with c3:
-            if st.button("🚨 ファール", use_container_width=True): record("ファール")
-            if st.button("✨ アシスト", use_container_width=True): record("AST")
+            if st.button("⚪ FT成功", use_container_width=True, type="primary"): quick_record("FT", "成功", 1)
+            if st.button("❌ FT失敗", use_container_width=True): quick_record("FT", "失敗", 0)
         
-        st.write("リバウンド / その他")
-        c4, c5, c6 = st.columns(3)
-        with c4:
-            if st.button("💪 OR", use_container_width=True): record("OR")
-        with c5:
-            if st.button("🛡️ DR", use_container_width=True): record("DR")
-        with c6:
-            if st.button("⚠️ TO", use_container_width=True): record("TO")
+        o1, o2, o3, o4, o5 = st.columns(5)
+        with o1: 
+            if st.button("OR", use_container_width=True): quick_record("OR", "成功", 0)
+        with o2: 
+            if st.button("DR", use_container_width=True): quick_record("DR", "成功", 0)
+        with o3: 
+            if st.button("AST", use_container_width=True): quick_record("AST", "成功", 0)
+        with o4: 
+            if st.button("STL", use_container_width=True): quick_record("STL", "成功", 0)
+        with o5: 
+            if st.button("🚨 F", use_container_width=True): quick_record("Foul", "なし", 0)
 
 # --- 【タブ2】試合レポート画面 ---
 with tab_report:
     if st.session_state.history.empty:
-        st.warning("データがありません。入力を先に進めてください。")
+        st.info("データが入力されるとレポートが作成されます。")
     else:
-        st.title("📊 GAME REPORT")
+        st.title(f"🏀 GAME ANALYSIS REPORT")
+        st.caption(f"試合日: {game_date} | {home_name} vs {away_name}")
         
-        # --- 1ページ目：表紙（サマリー） ---
-        st.header("1. 試合サマリー")
+        # 1. スコアサマリー
+        st.header("1. 試合経過・スコア")
+        score_board = st.session_state.history.groupby(['Q', 'チーム'])['点数'].sum().unstack().fillna(0).astype(int)
+        st.table(score_board.T)
         
-        # クォーター別得点表
-        q_scores = st.session_state.history.groupby('Q')['点数'].sum()
-        st.subheader("【スコア推移】")
-        st.table(pd.DataFrame(q_scores).T)
-        
-        # チーム合計スタッツ
-        total_pts = st.session_state.history['点数'].sum()
-        total_reb = st.session_state.history[st.session_state.history['項目'].isin(['OR', 'DR'])].shape[0]
-        st.columns(2)[0].metric("チーム合計得点", f"{total_pts} 点")
-        st.columns(2)[1].metric("チーム合計リバウンド", f"{total_reb} 本")
+        # 2. 個人ボックススコアの作成
+        def build_boxscore(team_name):
+            st.subheader(f"【{team_name} ボックススコア】")
+            df = st.session_state.history[st.session_state.history['チーム'] == team_name]
+            if df.empty: return st.write("データがありません")
 
+            # 選手ごとに集計
+            players_list = df['名前'].unique()
+            rows = []
+            for p in players_list:
+                pdf = df[df['名前'] == p]
+                
+                # 各指標の算出
+                m2_in = len(pdf[(pdf['項目'] == '2P') & (pdf['結果'] == '成功')])
+                m2_att = len(pdf[pdf['項目'] == '2P'])
+                m3_in = len(pdf[(pdf['項目'] == '3P') & (pdf['結果'] == '成功')])
+                m3_att = len(pdf[pdf['項目'] == '3P'])
+                ft_in = len(pdf[(pdf['項目'] == 'FT') & (pdf['結果'] == '成功')])
+                ft_att = len(pdf[pdf['項目'] == 'FT'])
+                
+                fgm = m2_in + m3_in
+                fga = m2_att + m3_att
+                fg_pct = (fgm / fga * 100) if fga > 0 else 0
+                
+                rows.append({
+                    '選手': p,
+                    'PTS': pdf['点数'].sum(),
+                    'FGM': fgm, 'FGA': fga, 'FG%': f"{fg_pct:.1f}%",
+                    '3PM': m3_in, '3PA': m3_att,
+                    'FTM': ft_in, 'FTA': ft_att,
+                    'OR': len(pdf[pdf['項目'] == 'OR']),
+                    'DR': len(pdf[pdf['項目'] == 'DR']),
+                    'AST': len(pdf[pdf['項目'] == 'AST']),
+                    'STL': len(pdf[pdf['項目'] == 'STL']),
+                    'F': len(pdf[pdf['項目'] == 'Foul'])
+                })
+            
+            box_df = pd.DataFrame(rows).set_index('選手')
+            st.dataframe(box_df, use_container_width=True)
+
+        build_boxscore(home_name)
         st.divider()
+        build_boxscore(away_name)
 
-        # --- 2ページ目：詳細スタッツ ---
-        st.header("2. 個人詳細スタッツ")
-        # 個人別の各項目を集計
-        personal_stats = st.session_state.history.pivot_table(
-            index='名前', columns='項目', aggfunc='size', fill_value=0
-        )
-        # 得点計算（pivot_tableには点数が含まれないので別途追加）
-        personal_pts = st.session_state.history.groupby('名前')['点数'].sum()
-        personal_stats['総得点'] = personal_pts
-        
-        st.dataframe(personal_stats, use_container_width=True)
-
-        st.divider()
-
-        # --- 3ページ目：全プレイログ ---
-        st.header("3. プレイ詳細ログ")
-        st.write("すべての記録を時系列で表示しています。")
-        st.dataframe(st.session_state.history)
-
-        # CSVダウンロードボタン（これを送ればExcelで開ける）
+        # CSV出力
         csv = st.session_state.history.to_csv(index=False).encode('utf_8_sig')
-        st.download_button("レポートをCSVでダウンロード", csv, "game_report.csv", "text/csv")
-
-if st.sidebar.button("試合データをリセット"):
-    st.session_state.history = pd.DataFrame(columns=['Q', '名前', '項目', 'エリア', '結果', '点数'])
-    st.rerun()
+        st.download_button("レポート(CSV)を保存", csv, f"Report_{game_date}.csv", "text/csv")
