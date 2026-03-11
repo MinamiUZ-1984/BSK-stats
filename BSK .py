@@ -2,27 +2,25 @@ import streamlit as st
 import pandas as pd
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V03.5", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V03.6", layout="centered")
 
-# --- 0. CSS注入 (文字重なり解消・究極スリム設定) ---
+# --- 0. CSS注入 (TOの端切れを防止) ---
 st.markdown("""
     <style>
     /* 記録入力のボタン並びを強制 */
     [data-testid="stHorizontalBlock"] { flex-direction: row !important; flex-wrap: nowrap !important; gap: 0.2rem !important; }
     [data-testid="stHorizontalBlock"] > div { width: 100% !important; flex: 1 1 0% !important; min-width: 0px !important; }
-    .stButton > button { padding: 4px 1px !important; font-size: 11px !important; width: 100% !important; }
+    .stButton > button { padding: 5px 2px !important; font-size: 12px !important; width: 100% !important; }
     
-    /* レポートの表をiPhone幅にねじ込むための極小設定 */
-    div[data-testid="stTable"] table { font-size: 8px !important; width: 100% !important; table-layout: fixed; }
+    /* レポートの表設定 (TOが右端で切れないよう、文字サイズを微調整) */
+    div[data-testid="stTable"] table { font-size: 9px !important; width: 100% !important; table-layout: fixed; }
     div[data-testid="stTable"] th, div[data-testid="stTable"] td { 
-        padding: 1px 0px !important; /* 余白をゼロに */
+        padding: 2px 1px !important; 
         text-align: center !important; 
         white-space: pre-wrap !important; 
-        line-height: 1.0 !important; /* 行間を極限まで詰める */
+        line-height: 1.1 !important;
         word-break: break-all;
     }
-    /* 表の枠線を少し細くしてスッキリさせる */
-    table, th, td { border: 0.1px solid #ddd !important; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -61,7 +59,7 @@ def record(item, detail="-", res="成功", pts=0, team=None, name=None):
 # --- 4. タブ構成 ---
 tab_input, tab_report, tab_edit = st.tabs(["✍️ 記録入力", "📄 レポート", "🛠 修正"])
 
-# --- 【タブ1】記録入力 --- (V02.9~V03.4 構成を維持)
+# --- 【タブ1】記録入力 ---
 with tab_input:
     if not st.session_state.history.empty:
         try:
@@ -70,8 +68,8 @@ with tab_input:
         except: pass
     st.session_state.current_q = st.radio("Q", ["1Q", "2Q", "3Q", "4Q", "OT"], horizontal=True)
     st.divider()
-    
-    # HOME
+
+    # HOME 選手ボタン
     st.write(f"🔵 **{home_name}**")
     for i in range(0, len(home_players), 5):
         row_players = home_players[i:i+5]; cols = st.columns(5)
@@ -90,7 +88,7 @@ with tab_input:
             if c[0].button("2P", use_container_width=True, type="primary"): st.session_state.tmp['item']="2P"; st.session_state.mode="エリア選択"; st.rerun()
             if c[1].button("3P", use_container_width=True, type="primary"): st.session_state.tmp['item']="3P"; st.session_state.mode="エリア選択"; st.rerun()
             if c[2].button("FT", use_container_width=True): st.session_state.tmp['item']="FT"; st.session_state.mode="結果選択"; st.rerun()
-            o = st.columns(4)
+            o = st.columns(3) # BLK削除により3列へ
             with o[0]:
                 if st.button("OR", use_container_width=True): record("OR"); st.rerun()
                 if st.button("DR", use_container_width=True): record("DR"); st.rerun()
@@ -99,13 +97,20 @@ with tab_input:
                 if st.button("STL", use_container_width=True): record("STL"); st.rerun()
             with o[2]:
                 if st.button("F", use_container_width=True): record("Foul"); st.rerun()
-                if st.button("BLK", use_container_width=True): record("BLK"); st.rerun()
-            with o[3]:
+                # BLKボタンを削除してスペースを確保
+            
+            st.write("▼ TurnOver")
+            to_cols = st.columns(4)
+            with to_cols[0]:
                 if st.button("TV", use_container_width=True): record("TO", "TV"); st.rerun()
+            with to_cols[1]:
                 if st.button("DD", use_container_width=True): record("TO", "DD"); st.rerun()
+            with to_cols[2]:
                 if st.button("PM", use_container_width=True): record("TO", "PM"); st.rerun()
+            with to_cols[3]:
                 if st.button("24S", use_container_width=True): record("TO", "24S"); st.rerun()
             if st.button("キャンセル", use_container_width=True): st.session_state.mode="選手選択"; st.rerun()
+        # (エリア選択・結果選択は変更なし)
         elif st.session_state.mode == "エリア選択":
             it = st.session_state.tmp.get('item', '2P')
             r1, r2, r3 = st.columns(3), st.columns(3), st.columns(5)
@@ -133,7 +138,7 @@ with tab_input:
             if cols[idx].button(p_num, key=f"a_{p_num}", use_container_width=True):
                 st.session_state.tmp = {'player': p_num, 'team': away_name}; st.session_state.mode = "項目選択"; st.rerun()
 
-# --- 【タブ2】分析レポート (究極スリム化) ---
+# --- 【タブ2】分析レポート ---
 with tab_report:
     if st.session_state.history.empty: st.info("データなし")
     else:
@@ -147,7 +152,7 @@ with tab_report:
         def get_stats_df(t_name, p_list):
             df = st.session_state.history[st.session_state.history['チーム'] == t_name]
             rows = []
-            tp, tm2i, tm2a, tm3i, tm3a, tfi, tfa, tor, tdr, tast, tstl, tblk, tf, ttv, tdd, tpm, ts24 = [0]*17
+            tp, tm2i, tm2a, tm3i, tm3a, tfi, tfa, tor, tdr, tast, tstl, tf, ttv, tdd, tpm, ts24 = [0]*16
             def fmt_stat(m, a): return f"{m}/{a}\n{(m/a*100):.0f}%" if a > 0 else "0/0\n0%"
 
             for p_num in p_list:
@@ -156,12 +161,12 @@ with tab_report:
                 m3i, m3a = len(pdf[(pdf['項目']=='3P') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='3P'])
                 fi, fa = len(pdf[(pdf['項目']=='FT') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='FT'])
                 orb, drb = len(pdf[pdf['項目']=='OR']), len(pdf[pdf['項目']=='DR'])
-                ast, stl, blk, f = len(pdf[pdf['項目']=='AST']), len(pdf[pdf['項目']=='STL']), len(pdf[pdf['項目']=='BLK']), len(pdf[pdf['項目']=='Foul'])
+                ast, stl, f = len(pdf[pdf['項目']=='AST']), len(pdf[pdf['項目']=='STL']), len(pdf[pdf['項目']=='Foul'])
                 to = pdf[pdf['項目']=='TO']
                 tv, dd, pm, s24 = len(to[to['詳細']=='TV']), len(to[to['詳細']=='DD']), len(to[to['詳細']=='PM']), len(to[to['詳細']=='24S'])
                 p = pdf['点数'].sum()
 
-                tp+=p; tm2i+=m2i; tm2a+=m2a; tm3i+=m3i; tm3a+=m3a; tfi+=fi; tfa+=fa; tor+=orb; tdr+=drb; tast+=ast; tstl+=stl; tblk+=blk; tf+=f; ttv+=tv; tdd+=dd; tpm+=pm; ts24+=s24
+                tp+=p; tm2i+=m2i; tm2a+=m2a; tm3i+=m3i; tm3a+=m3a; tfi+=fi; tfa+=fa; tor+=orb; tdr+=drb; tast+=ast; tstl+=stl; tf+=f; ttv+=tv; tdd+=dd; tpm+=pm; ts24+=s24
                 
                 rows.append({
                     '#': p_num, 'Pts': p, 
@@ -169,7 +174,7 @@ with tab_report:
                     '3P\n(M/A)': fmt_stat(m3i, m3a), 
                     'FT\n(M/A)': fmt_stat(fi, fa), 
                     'REB\n(D/O)': f"{drb+orb}\n({drb}/{orb})", 
-                    'As': ast, 'St': stl, 'B': blk, 'F': f, 
+                    'As': ast, 'St': stl, 'F': f, 
                     'TO\n(T/D/P/2)': f"{tv+dd+pm+s24}\n({tv}/{dd}/{pm}/{s24})"
                 })
             
@@ -179,7 +184,7 @@ with tab_report:
                 '3P\n(M/A)': fmt_stat(tm3i, tm3a), 
                 'FT\n(M/A)': fmt_stat(tfi, tfa), 
                 'REB\n(D/O)': f"{tdr+tor}\n({tdr}/{tor})", 
-                'As': tast, 'St': tstl, 'B': tblk, 'F': tf, 
+                'As': tast, 'St': tstl, 'F': tf, 
                 'TO\n(T/D/P/2)': f"{ttv+tdd+tpm+ts24}\n({ttv}/{tdd}/{tpm}/{ts24})"
             })
             return pd.DataFrame(rows)
