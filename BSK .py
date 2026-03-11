@@ -197,4 +197,86 @@ with tab_input:
                 st.session_state.mode="エリア選択" if "P" in item else "項目選択"; st.rerun()
 
         # --- ★アシスト選択画面 ---
-        elif st
+        elif st.session_state.mode == "アシスト選択":
+            scorer = st.session_state.tmp.get('player')
+            t_name = st.session_state.tmp.get('team')
+            st.write(f"🏀 **#{scorer}** 得点！アシストは？")
+            
+            active_list = active_h if t_name == home_name else active_a
+            assist_candidates = [p for p in active_list if p != scorer]
+            
+            if assist_candidates:
+                ast_c = st.columns(len(assist_candidates))
+                for i, p_num in enumerate(assist_candidates):
+                    if ast_c[i].button(p_num, key=f"ast_{p_num}", use_container_width=True):
+                        record("AST", detail=f"to #{scorer}", res="成功", pts=0, team=t_name, name=f"{p_num}番")
+                        st.rerun()
+            
+            st.divider()
+            if st.button("❌ アシストなし", use_container_width=True):
+                st.session_state.mode = "選手選択"
+                st.rerun()
+
+    st.divider()
+    # AWAY：オンコートのみ
+    if st.button(f"⏰ {away_name} TOUT", use_container_width=True): record("TOUT", team=away_name, name="TEAM")
+    st.write(f"🔴 **{away_name}**")
+    if not active_a: st.warning("サイドバーで選手を選んでください")
+    else:
+        cols_a = st.columns(len(active_a))
+        for i, p_num in enumerate(active_a):
+            if cols_a[i].button(p_num, key=f"a_{p_num}", use_container_width=True):
+                st.session_state.tmp = {'player': p_num, 'team': away_name}; st.session_state.mode = "項目選択"; st.rerun()
+
+# 【タブ2】レポート 
+with tab_report:
+    if st.session_state.history.empty: st.info("データなし")
+    else:
+        st.header("1. スコア推移")
+        try:
+            rep_qs = st.session_state.history.groupby(['チーム', 'Q'])['点数'].sum().unstack(fill_value=0).reindex(index=[home_name, away_name], columns=["1Q", "2Q", "3Q", "4Q", "OT"], fill_value=0)
+            rep_qs['Total'] = rep_qs.sum(axis=1); st.table(rep_qs.astype(int))
+        except: pass
+
+        st.header("2. 個人スタッツ")
+        def get_stats_df(t_name, p_list_all):
+            df = st.session_state.history[st.session_state.history['チーム'] == t_name]
+            rows = []
+            tp, tm2i, tm2a, tm3i, tm3a, tfi, tfa, tor, tdr, tast, tstl, tf, ttv, tdd, tpm, ts24 = [0]*16
+            def fmt_stat(m, a): return f"{m}/{a}\n{(m/a*100):.0f}%" if a > 0 else "0/0\n0%"
+            for p_num in p_list_all:
+                pn = f"{p_num}番"; pdf = df[df['名前'] == pn]
+                m2i, m2a = len(pdf[(pdf['項目']=='2P') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='2P'])
+                m3i, m3a = len(pdf[(pdf['項目']=='3P') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='3P'])
+                fi, fa = len(pdf[(pdf['項目']=='FT') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='FT'])
+                orb, drb = len(pdf[pdf['項目']=='OR']), len(pdf[pdf['項目']=='DR'])
+                ast, stl, f = len(pdf[pdf['項目']=='AST']), len(pdf[pdf['項目']=='STL']), len(pdf[pdf['項目']=='Foul'])
+                to = pdf[pdf['項目']=='TO']; tv, dd, pm, s24 = len(to[to['詳細']=='TV']), len(to[to['詳細']=='DD']), len(to[to['詳細']=='PM']), len(to[to['詳細']=='24S'])
+                p = pdf['点数'].sum()
+                tp+=p; tm2i+=m2i; tm2a+=m2a; tm3i+=m3i; tm3a+=m3a; tfi+=fi; tfa+=fa; tor+=orb; tdr+=drb; tast+=ast; tstl+=stl; tf+=f; ttv+=tv; tdd+=dd; tpm+=pm; ts24+=s24
+                rows.append({'#': p_num, 'Pts': p, 'FG\n(M/A)': fmt_stat(m2i+m3i, m2a+m3a), '3P\n(M/A)': fmt_stat(m3i, m3a), 'FT\n(M/A)': fmt_stat(fi, fa), 
+                             'REB\n(D/O)': f"{drb+orb}\n({drb}/{orb})", 'As': ast, 'St': stl, 'F': f, 'TO\n(T/D/P/2)': f"{tv+dd+pm+s24}\n({tv}/{dd}/{pm}/{s24})", 'Team': t_name})
+            rows.append({'#': 'Total', 'Pts': tp, 'FG\n(M/A)': fmt_stat(tm2i+tm3i, tm2a+tm3a), '3P\n(M/A)': fmt_stat(tm3i, tm3a), 'FT\n(M/A)': fmt_stat(tfi, tfa), 
+                         'REB\n(D/O)': f"{tdr+tor}\n({tdr}/{tor})", 'As': tast, 'St': tstl, 'F': tf, 'TO\n(T/D/P/2)': f"{ttv+tdd+tpm+ts24}\n({ttv}/{tdd}/{tpm}/{ts24})", 'Team': t_name})
+            return pd.DataFrame(rows)
+        
+        st.write(f"🔵 **{home_name}**"); h_df = get_stats_df(home_name, all_h); st.table(h_df.drop(columns='Team').set_index('#'))
+        st.write(f"🔴 **{away_name}**"); a_df = get_stats_df(away_name, all_a); st.table(a_df.drop(columns='Team').set_index('#'))
+
+        st.divider()
+        st.header("3. 詳細ログ")
+        st.dataframe(st.session_state.history.iloc[::-1], use_container_width=True)
+        
+        csv_stats = pd.concat([h_df, a_df], ignore_index=True).to_csv(index=False).encode('utf_8_sig')
+        st.download_button("📊 統計CSV保存", csv_stats, f"{tournament_name}_stats.csv", "text/csv")
+        csv_log = st.session_state.history.to_csv(index=False).encode('utf_8_sig')
+        st.download_button("📜 ログCSV保存", csv_log, f"{tournament_name}_log.csv", "text/csv")
+
+with tab_edit:
+    st.header("🛠 修正")
+    if not st.session_state.history.empty:
+        for i, row in st.session_state.history.iloc[::-1].iterrows():
+            cols = st.columns([4, 1])
+            cols[0].write(f"{row['Q']}|{row['名前']}|{row['項目']}({row['詳細']})")
+            if cols[1].button("🗑️", key=f"del_{i}"):
+                st.session_state.history = st.session_state.history.drop(i); st.rerun()
