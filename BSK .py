@@ -2,26 +2,30 @@ import streamlit as st
 import pandas as pd
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V02.7", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V02.8", layout="centered")
 
-# --- 0. iPhone用レイアウト微調整 (CSS注入) ---
+# --- 0. iPhone用・強制横並びCSS (最優先適用) ---
 st.markdown("""
     <style>
-    /* ボタンの余白と高さを詰める */
-    .stButton > button {
-        padding: 0.2rem 0.5rem !important;
-        height: auto !important;
-        min-height: 40px !important;
+    /* 画面幅に関わらずカラムを横並びに維持する */
+    [data-testid="stHorizontalBlock"] {
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
+        gap: 0.5rem !important;
     }
-    /* モバイルでもカラムを縦に並べず、横に維持する魔法のコード */
-    [data-testid="column"] {
+    [data-testid="stHorizontalBlock"] > div {
+        width: 100% !important;
         flex: 1 1 0% !important;
         min-width: 0px !important;
     }
-    /* タブの文字サイズ調整 */
-    button[data-baseweb="tab"] {
+    /* ボタンの余白を削ってスリムにする */
+    .stButton > button {
+        padding: 5px 2px !important;
         font-size: 14px !important;
+        width: 100% !important;
     }
+    /* 記録入力画面のQ選択ラジオボタンを横に並べる */
+    [data-testid="stWidgetLabel"] { display: none; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -69,30 +73,32 @@ with tab_input:
             qs = st.session_state.history.groupby(['チーム', 'Q'])['点数'].sum().unstack(fill_value=0).reindex(index=[home_name, away_name], columns=["1Q", "2Q", "3Q", "4Q", "OT"], fill_value=0)
             qs['Total'] = qs.sum(axis=1); st.table(qs.astype(int))
         except: pass
-    st.session_state.current_q = st.radio("Q", ["1Q", "2Q", "3Q", "4Q", "OT"], horizontal=True, label_visibility="collapsed")
+    st.session_state.current_q = st.radio("Q", ["1Q", "2Q", "3Q", "4Q", "OT"], horizontal=True)
     st.divider()
 
-    # --- 自チーム選手 (HOME) 5列固定 ---
+    # --- HOME 選手選択 (強制5列) ---
     st.write(f"🔵 **{home_name}**")
-    h_rows = [home_players[i:i + 5] for i in range(0, len(home_players), 5)]
-    for row_players in h_rows:
+    for i in range(0, len(home_players), 5):
+        row_players = home_players[i:i+5]
         cols = st.columns(5)
-        for i, p_num in enumerate(row_players):
-            if cols[i].button(p_num, key=f"h_{p_num}", use_container_width=True):
+        for idx, p_num in enumerate(row_players):
+            if cols[idx].button(p_num, key=f"h_{p_num}", use_container_width=True):
                 st.session_state.tmp = {'player': p_num, 'team': home_name}; st.session_state.mode = "項目選択"; st.rerun()
 
     if st.button(f"⏰ {home_name} TOUT", use_container_width=True): record("TOUT", team=home_name, name="TEAM")
 
-    # --- 操作パネル ---
+    # --- 操作パネル (強制横並び) ---
     st.divider()
     with st.container(border=True):
-        if st.session_state.mode == "選手選択": st.info("選手をタップ")
+        if st.session_state.mode == "選手選択":
+            st.info("選手をタップしてください")
         elif st.session_state.mode == "項目選択":
             st.subheader(f"#{st.session_state.tmp.get('player')}")
             c = st.columns(3)
             if c[0].button("2P", use_container_width=True, type="primary"): st.session_state.tmp['item']="2P"; st.session_state.mode="エリア選択"; st.rerun()
             if c[1].button("3P", use_container_width=True, type="primary"): st.session_state.tmp['item']="3P"; st.session_state.mode="エリア選択"; st.rerun()
             if c[2].button("FT", use_container_width=True): st.session_state.tmp['item']="FT"; st.session_state.mode="結果選択"; st.rerun()
+            
             o = st.columns(4)
             with o[0]:
                 if st.button("OR", use_container_width=True): record("OR"); st.rerun()
@@ -109,14 +115,17 @@ with tab_input:
                 if st.button("PM", use_container_width=True): record("TO", "PM"); st.rerun()
                 if st.button("24S", use_container_width=True): record("TO", "24S"); st.rerun()
             if st.button("キャンセル", use_container_width=True): st.session_state.mode="選手選択"; st.rerun()
+        
         elif st.session_state.mode == "エリア選択":
             it = st.session_state.tmp.get('item', '2P')
-            r1, r2, r3 = st.columns(3), st.columns(3), st.columns(5)
             if it == "2P":
+                r1 = st.columns(3)
                 for i, a in enumerate(["左下", "中下", "右下"]):
                     if r1[i].button(a, use_container_width=True): st.session_state.tmp['area']=a; st.session_state.mode="結果選択"; st.rerun()
+                r2 = st.columns(3)
                 for i, a in enumerate(["左レ", "中レ", "右レ"]):
                     if r2[i].button(a, use_container_width=True): st.session_state.tmp['area']=a; st.session_state.mode="結果選択"; st.rerun()
+                r3 = st.columns(5)
                 for i, a in enumerate(["左角", "左45", "中", "右45", "右角"]):
                     if r3[i].button(a, use_container_width=True): st.session_state.tmp['area']=a; st.session_state.mode="結果選択"; st.rerun()
             else:
@@ -124,27 +133,28 @@ with tab_input:
                 for i, a in enumerate(["左角", "左45", "中", "右45", "右角"]):
                     if r4[i].button(a, use_container_width=True): st.session_state.tmp['area']=a; st.session_state.mode="結果選択"; st.rerun()
             if st.button("戻る"): st.session_state.mode="項目選択"; st.rerun()
+            
         elif st.session_state.mode == "結果選択":
             st.write(f"🎯 {st.session_state.tmp.get('area', 'FT')}")
-            sc, fl = st.columns(2)
+            sc = st.columns(2)
             pts = {"2P": 2, "3P": 3, "FT": 1}.get(st.session_state.tmp.get('item', '2P'), 0)
-            if sc.button("SUCCESS", use_container_width=True, type="primary"): record(st.session_state.tmp.get('item'), detail=st.session_state.tmp.get('area','-'), res="成功", pts=pts); st.rerun()
-            if fl.button("MISS", use_container_width=True): record(st.session_state.tmp.get('item'), detail=st.session_state.tmp.get('area','-'), res="失敗", pts=0); st.rerun()
+            if sc[0].button("SUCCESS", use_container_width=True, type="primary"): record(st.session_state.tmp.get('item'), detail=st.session_state.tmp.get('area','-'), res="成功", pts=pts); st.rerun()
+            if sc[1].button("MISS", use_container_width=True): record(st.session_state.tmp.get('item'), detail=st.session_state.tmp.get('area','-'), res="失敗", pts=0); st.rerun()
             if st.button("戻る"): st.session_state.mode="エリア選択" if "P" in st.session_state.tmp.get('item','') else "項目選択"; st.rerun()
+
     st.divider()
 
-    # --- 相手チーム選手 (AWAY) 5列固定 ---
+    # --- AWAY 選手選択 (強制5列) ---
     if st.button(f"⏰ {away_name} TOUT", use_container_width=True): record("TOUT", team=away_name, name="TEAM")
     st.write(f"🔴 **{away_name}**")
-    a_rows = [away_players[i:i + 5] for i in range(0, len(away_players), 5)]
-    for row_players in a_rows:
+    for i in range(0, len(away_players), 5):
+        row_players = away_players[i:i+5]
         cols = st.columns(5)
-        for i, p_num in enumerate(row_players):
-            if cols[i].button(p_num, key=f"a_{p_num}", use_container_width=True):
+        for idx, p_num in enumerate(row_players):
+            if cols[idx].button(p_num, key=f"a_{p_num}", use_container_width=True):
                 st.session_state.tmp = {'player': p_num, 'team': away_name}; st.session_state.mode = "項目選択"; st.rerun()
 
-# --- 【タブ2】分析レポート ---
-# (V02.6と同じロジックを維持)
+# --- 【タブ2】分析レポート (V02.6 準拠) ---
 with tab_report:
     if st.session_state.history.empty: st.info("データなし")
     else:
@@ -160,10 +170,12 @@ with tab_report:
             df = st.session_state.history[st.session_state.history['チーム'] == t_name]
             rows = []
             t_pts, t_m2i, t_m2a, t_m3i, t_m3a, t_fti, t_fta = 0,0,0,0,0,0,0
-            t_orb, t_drb, t_ast, t_stl, t_foul, t_tv, t_dd, t_pm, t_s24 = 0,0,0,0,0,0,0,0,0
+            t_orb, t_drb, t_ast, t_stl, t_foul = 0,0,0,0,0
+            t_tv, t_dd, t_pm, t_s24 = 0,0,0,0
             
             def fmt_stat(m, a):
-                return f"{m}/{a} ({(m/a*100):.0f}%)" if a > 0 else f"{m}/{a} (0%)"
+                pct = f"({(m/a*100):.0f}%)" if a > 0 else "(0%)"
+                return f"{m}/{a} {pct}"
 
             for p_num in p_list_source:
                 p_name = f"{p_num}番"; pdf = df[df['名前'] == p_name]
