@@ -2,7 +2,28 @@ import streamlit as st
 import pandas as pd
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V02.6", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V02.7", layout="centered")
+
+# --- 0. iPhone用レイアウト微調整 (CSS注入) ---
+st.markdown("""
+    <style>
+    /* ボタンの余白と高さを詰める */
+    .stButton > button {
+        padding: 0.2rem 0.5rem !important;
+        height: auto !important;
+        min-height: 40px !important;
+    }
+    /* モバイルでもカラムを縦に並べず、横に維持する魔法のコード */
+    [data-testid="column"] {
+        flex: 1 1 0% !important;
+        min-width: 0px !important;
+    }
+    /* タブの文字サイズ調整 */
+    button[data-baseweb="tab"] {
+        font-size: 14px !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
 # --- 1. データ初期化 ---
 if 'history' not in st.session_state:
@@ -50,12 +71,19 @@ with tab_input:
         except: pass
     st.session_state.current_q = st.radio("Q", ["1Q", "2Q", "3Q", "4Q", "OT"], horizontal=True, label_visibility="collapsed")
     st.divider()
+
+    # --- 自チーム選手 (HOME) 5列固定 ---
     st.write(f"🔵 **{home_name}**")
-    h_cols = st.columns(5)
-    for i, p_num in enumerate(home_players):
-        if h_cols[i % 5].button(p_num, key=f"h_{p_num}", use_container_width=True):
-            st.session_state.tmp = {'player': p_num, 'team': home_name}; st.session_state.mode = "項目選択"
+    h_rows = [home_players[i:i + 5] for i in range(0, len(home_players), 5)]
+    for row_players in h_rows:
+        cols = st.columns(5)
+        for i, p_num in enumerate(row_players):
+            if cols[i].button(p_num, key=f"h_{p_num}", use_container_width=True):
+                st.session_state.tmp = {'player': p_num, 'team': home_name}; st.session_state.mode = "項目選択"; st.rerun()
+
     if st.button(f"⏰ {home_name} TOUT", use_container_width=True): record("TOUT", team=home_name, name="TEAM")
+
+    # --- 操作パネル ---
     st.divider()
     with st.container(border=True):
         if st.session_state.mode == "選手選択": st.info("選手をタップ")
@@ -85,15 +113,15 @@ with tab_input:
             it = st.session_state.tmp.get('item', '2P')
             r1, r2, r3 = st.columns(3), st.columns(3), st.columns(5)
             if it == "2P":
-                for i, a in enumerate(["左ゴール下", "中ゴール下", "右ゴール下"]):
+                for i, a in enumerate(["左下", "中下", "右下"]):
                     if r1[i].button(a, use_container_width=True): st.session_state.tmp['area']=a; st.session_state.mode="結果選択"; st.rerun()
-                for i, a in enumerate(["左レイアップ", "中レイアップ", "右レイアップ"]):
+                for i, a in enumerate(["左レ", "中レ", "右レ"]):
                     if r2[i].button(a, use_container_width=True): st.session_state.tmp['area']=a; st.session_state.mode="結果選択"; st.rerun()
                 for i, a in enumerate(["左角", "左45", "中", "右45", "右角"]):
                     if r3[i].button(a, use_container_width=True): st.session_state.tmp['area']=a; st.session_state.mode="結果選択"; st.rerun()
             else:
                 r4 = st.columns(5)
-                for i, a in enumerate(["左角3P", "左45 3P", "中 3P", "右45 3P", "右角3P"]):
+                for i, a in enumerate(["左角", "左45", "中", "右45", "右角"]):
                     if r4[i].button(a, use_container_width=True): st.session_state.tmp['area']=a; st.session_state.mode="結果選択"; st.rerun()
             if st.button("戻る"): st.session_state.mode="項目選択"; st.rerun()
         elif st.session_state.mode == "結果選択":
@@ -104,14 +132,19 @@ with tab_input:
             if fl.button("MISS", use_container_width=True): record(st.session_state.tmp.get('item'), detail=st.session_state.tmp.get('area','-'), res="失敗", pts=0); st.rerun()
             if st.button("戻る"): st.session_state.mode="エリア選択" if "P" in st.session_state.tmp.get('item','') else "項目選択"; st.rerun()
     st.divider()
+
+    # --- 相手チーム選手 (AWAY) 5列固定 ---
     if st.button(f"⏰ {away_name} TOUT", use_container_width=True): record("TOUT", team=away_name, name="TEAM")
     st.write(f"🔴 **{away_name}**")
-    a_cols = st.columns(5)
-    for i, p_num in enumerate(away_players):
-        if a_cols[i % 5].button(p_num, key=f"a_{p_num}", use_container_width=True):
-            st.session_state.tmp = {'player': p_num, 'team': away_name}; st.session_state.mode = "項目選択"
+    a_rows = [away_players[i:i + 5] for i in range(0, len(away_players), 5)]
+    for row_players in a_rows:
+        cols = st.columns(5)
+        for i, p_num in enumerate(row_players):
+            if cols[i].button(p_num, key=f"a_{p_num}", use_container_width=True):
+                st.session_state.tmp = {'player': p_num, 'team': away_name}; st.session_state.mode = "項目選択"; st.rerun()
 
 # --- 【タブ2】分析レポート ---
+# (V02.6と同じロジックを維持)
 with tab_report:
     if st.session_state.history.empty: st.info("データなし")
     else:
@@ -122,20 +155,15 @@ with tab_report:
             rep_qs['Total'] = rep_qs.sum(axis=1); st.table(rep_qs.astype(int))
         except: pass
 
-        # --- 2. 個人スタッツ (V02.6：M/A(%) 統合版) ---
         st.header("2. 個人スタッツ")
         def build_box(t_name, p_list_source):
             df = st.session_state.history[st.session_state.history['チーム'] == t_name]
             rows = []
-            
-            # チーム合計用
             t_pts, t_m2i, t_m2a, t_m3i, t_m3a, t_fti, t_fta = 0,0,0,0,0,0,0
-            t_orb, t_drb, t_ast, t_stl, t_foul, t_to = 0,0,0,0,0,0
-            t_tv, t_dd, t_pm, t_s24 = 0,0,0,0
+            t_orb, t_drb, t_ast, t_stl, t_foul, t_tv, t_dd, t_pm, t_s24 = 0,0,0,0,0,0,0,0,0
             
             def fmt_stat(m, a):
-                pct = f"({(m/a*100):.0f}%)" if a > 0 else "(0%)"
-                return f"{m}/{a} {pct}"
+                return f"{m}/{a} ({(m/a*100):.0f}%)" if a > 0 else f"{m}/{a} (0%)"
 
             for p_num in p_list_source:
                 p_name = f"{p_num}番"; pdf = df[df['名前'] == p_name]
@@ -161,7 +189,6 @@ with tab_report:
                     'TO(T/D/P/2S)': f"{tv+dd+pm+s24} ({tv}/{dd}/{pm}/{s24})"
                 })
             
-            # TOTAL行
             rows.append({
                 '#': 'TOTAL', 'Pts': t_pts,
                 'FG(M/A/%)': fmt_stat(t_m2i+t_m3i, t_m2a+t_m3a),
@@ -171,14 +198,10 @@ with tab_report:
                 'As': t_ast, 'St': t_stl, 'F': t_foul,
                 'TO(T/D/P/2S)': f"{t_tv+t_dd+t_pm+t_s24} ({t_tv}/{t_dd}/{t_pm}/{t_s24})"
             })
-            
-            st.write(f"### {t_name}")
-            st.table(pd.DataFrame(rows).set_index('#'))
+            st.write(f"### {t_name}"); st.table(pd.DataFrame(rows).set_index('#'))
 
         build_box(home_name, home_players); build_box(away_name, away_players)
-
-        st.header("3. 詳細ログ")
-        st.dataframe(st.session_state.history.iloc[::-1], use_container_width=True)
+        st.header("3. 詳細ログ"); st.dataframe(st.session_state.history.iloc[::-1], use_container_width=True)
         csv = st.session_state.history.to_csv(index=False).encode('utf_8_sig')
         st.download_button("📊 CSV保存", csv, f"report.csv", "text/csv")
 
