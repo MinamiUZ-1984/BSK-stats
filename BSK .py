@@ -21,7 +21,6 @@ with st.sidebar:
     
     st.divider()
     home_name = st.text_input("自チーム名", "HOME")
-    # デフォルト背番号 4-23 (20名)
     default_nums = ",".join([str(i) for i in range(4, 24)])
     home_players_input = st.text_area("自チーム背番号 (カンマ区切り)", default_nums)
     home_players = [n.strip() for n in home_players_input.split(",") if n.strip()]
@@ -54,7 +53,7 @@ def record(item, detail="-", res="成功", pts=0):
 tab_input, tab_report = st.tabs(["✍️ 記録入力", "📄 試合分析レポート"])
 
 with tab_input:
-    # クォーター選択
+    # Q選択
     st.session_state.current_q = st.radio("Q選択", ["1Q", "2Q", "3Q", "4Q", "OT"], horizontal=True, label_visibility="collapsed")
     st.divider()
 
@@ -73,8 +72,7 @@ with tab_input:
     container = st.container(border=True)
     with container:
         if st.session_state.mode == "選手選択":
-            st.info("上下どちらかの選手をタップして記録開始")
-        
+            st.info("上下の選手をタップして記録開始")
         elif st.session_state.mode == "項目選択":
             st.subheader(f"⚡ {st.session_state.tmp['team']} #{st.session_state.tmp['player']}")
             c1, c2, c3 = st.columns(3)
@@ -145,17 +143,12 @@ with tab_input:
 # --- 5. レポートタブ ---
 with tab_report:
     if st.session_state.history.empty:
-        st.info("データなし")
+        st.info("データが記録されるとここにレポートが表示されます。")
     else:
         st.title(f"📊 {tournament_name}")
-        st.subheader(f"試合結果レポート ({game_date})")
-        
-        # 簡易スコア
-        score = st.session_state.history.groupby('チーム')['点数'].sum()
-        c1, c2 = st.columns(2)
-        c1.metric(home_name, f"{int(score.get(home_name, 0))} pts")
-        c2.metric(away_name, f"{int(score.get(away_name, 0))} pts")
-        
-        st.divider()
-        st.write("### 選手スタッツ一覧 (FGM/FGA対応中...)")
-        st.dataframe(st.session_state.history, use_container_width=True)
+        st.caption(f"試合日: {game_date} | {home_name} vs {away_name}")
+
+        # --- ① クォーター別スコア表 ---
+        st.header("1. スコア推移")
+        # 縦にチーム、横にQを並べる
+        q_scores = st.session_state.history.groupby(['チーム', 'Q'])['点数'].
