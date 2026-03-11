@@ -2,48 +2,43 @@ import streamlit as st
 import pandas as pd
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V06.1", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V07.0", layout="centered")
 
-# --- 0. CSS注入 (V05.0継承) ---
+# --- 0. CSS注入 (V06.1完全継承) ---
 st.markdown("""
     <style>
-    [data-testid="stHorizontalBlock"] { flex-direction: row !important; flex-wrap: nowrap !important; gap: 0.3rem !important; }
-    [data-testid="stHorizontalBlock"] > div { width: 100% !important; flex: 1 1 0% !important; min-width: 0px !important; }
-    .stButton > button { padding: 5px 2px !important; font-size: 13px !important; width: 100% !important; font-weight: bold;}
-    
-    div[data-testid="stTable"] table { font-size: 9px !important; width: 100% !important; table-layout: fixed; }
-    div[data-testid="stTable"] th, div[data-testid="stTable"] td { 
-        padding: 2px 1px !important; text-align: center !important; 
-        white-space: pre-wrap !important; line-height: 1.1 !important;
-        word-break: break-all;
-    }
+    .stTabs [data-baseweb="tab-list"] { gap: 10px; }
+    [data-testid="stHorizontalBlock"] { display: flex !important; flex-direction: row !important; width: 100% !important; gap: 4px !important; }
+    [data-testid="stHorizontalBlock"] > div { flex: 1 1 0% !important; min-width: 0 !important; }
+    .stButton > button { width: 100% !important; padding: 6px 2px !important; font-size: 13px !important; font-weight: bold !important; min-height: 44px !important; margin-bottom: -10px !important; }
+    [data-testid="stVerticalBlock"] { gap: 0.4rem !important; }
+    div[data-testid="stTable"] table { font-size: 9px !important; width: 100% !important; }
+    div[data-testid="stTable"] th, div[data-testid="stTable"] td { padding: 2px 1px !important; line-height: 1.1 !important; }
     </style>
 """, unsafe_allow_html=True)
 
 # --- 1. データ初期化 ---
-if 'history' not in st.session_state:
-    st.session_state.history = pd.DataFrame(columns=['id', 'Q', 'チーム', '名前', '項目', '詳細', '結果', '点数'])
+if 'history' not in st.session_state: st.session_state.history = pd.DataFrame(columns=['id', 'Q', 'チーム', '名前', '項目', '詳細', '結果', '点数'])
 if 'mode' not in st.session_state: st.session_state.mode = "選手選択"
 if 'tmp' not in st.session_state: st.session_state.tmp = {}
 if 'current_q' not in st.session_state: st.session_state.current_q = "1Q"
 
-# ★新規：ロスターとオンコート状態の保存用
+# チーム名と名簿の初期化（CSV復元時に上書きできるようにState管理）
+if 'h_name_in' not in st.session_state: st.session_state.h_name_in = "HOME"
+if 'a_name_in' not in st.session_state: st.session_state.a_name_in = "AWAY"
 if 'r_str_h' not in st.session_state: st.session_state.r_str_h = "4,5,6,7,8,9,10,11,12,13,14,15"
 if 'act_h' not in st.session_state: st.session_state.act_h = ["4","5","6","7","8"]
 if 'r_str_a' not in st.session_state: st.session_state.r_str_a = "4,5,6,7,8,9,10,11,12,13,14,15"
 if 'act_a' not in st.session_state: st.session_state.act_a = ["4","5","6","7","8"]
 
-# --- 2. サイドバー (縦並び・大ボタンでクイック追加) ---
+# --- 2. サイドバー ---
 with st.sidebar:
     st.header("🏆 試合設定")
     tournament_name = st.text_input("大会名", "練習試合")
-    game_date = st.date_input("試合日")
     st.divider()
     
     # === HOME ===
-    home_name = st.text_input("自チーム名", "HOME").strip()
-    
-    # 横分割をやめて、縦並びにしてボタン幅を最大化
+    home_name = st.text_input("自チーム名", key="h_name_in").strip()
     new_h = st.text_input(f"🔵 新規選手を追加", placeholder="例: 99")
     if st.button("＋追加＆出場", key="add_h", use_container_width=True):
         if new_h:
@@ -55,7 +50,6 @@ with st.sidebar:
             st.session_state.r_str_h = ",".join(all_h_list)
             st.rerun()
 
-    # 長い名簿は折りたたむ
     with st.expander(f"👥 {home_name} 名簿を手動編集"):
         st.session_state.r_str_h = st.text_area("全背番号 (カンマ区切り)", st.session_state.r_str_h, key="ta_h")
     
@@ -67,8 +61,7 @@ with st.sidebar:
     st.divider()
     
     # === AWAY ===
-    away_name = st.text_input("相手チーム名", "AWAY").strip()
-    
+    away_name = st.text_input("相手チーム名", key="a_name_in").strip()
     new_a = st.text_input(f"🔴 新規選手を追加", placeholder="例: 99", key="in_a")
     if st.button("＋追加＆出場", key="add_a", use_container_width=True):
         if new_a:
@@ -89,7 +82,49 @@ with st.sidebar:
     active_a = st.session_state.act_a
     
     st.divider()
-    if st.button("全データリセット", type="secondary"):
+    
+    # ★新規：過去データ復元（CSV読み込み）機能
+    with st.expander("📂 過去データを復元・確認 (CSV読込)"):
+        st.write("「詳細ログ」のCSVをアップロードすると、過去の試合レポートを確認・再開できます。")
+        uploaded_file = st.file_uploader("詳細ログCSVを選択", type=["csv"], label_visibility="collapsed")
+        if uploaded_file is not None:
+            if st.button("データを復元する", type="primary", use_container_width=True):
+                try:
+                    df = pd.read_csv(uploaded_file)
+                    # 必須列があるかチェック
+                    if set(['id', 'Q', 'チーム', '名前', '項目', '詳細', '結果', '点数']).issubset(df.columns):
+                        st.session_state.history = df
+                        
+                        # チーム名と選手名簿をCSVから逆算して自動復元
+                        teams = [t for t in df['チーム'].unique() if pd.notna(t) and str(t) != 'UNKNOWN']
+                        if len(teams) > 0: st.session_state.h_name_in = teams[0]
+                        if len(teams) > 1: st.session_state.a_name_in = teams[1]
+                        
+                        def extract_players(team_name):
+                            p_list = df[df['チーム'] == team_name]['名前'].dropna().unique()
+                            # '番' を消して数字だけ抽出、'TEAM'は除外
+                            return [str(p).replace('番', '') for p in p_list if str(p) != 'TEAM']
+                        
+                        if len(teams) > 0:
+                            h_p = extract_players(teams[0])
+                            if h_p:
+                                st.session_state.r_str_h = ",".join(h_p)
+                                st.session_state.act_h = h_p[:5]
+                        if len(teams) > 1:
+                            a_p = extract_players(teams[1])
+                            if a_p:
+                                st.session_state.r_str_a = ",".join(a_p)
+                                st.session_state.act_a = a_p[:5]
+                        
+                        st.toast("データを復元しました！")
+                        st.rerun()
+                    else:
+                        st.error("対応していないCSV形式です（詳細ログCSVを選んでください）。")
+                except Exception as e:
+                    st.error("読み込みに失敗しました。")
+    
+    st.divider()
+    if st.button("全データリセット (新規試合)", type="secondary", use_container_width=True):
         st.session_state.history = pd.DataFrame(columns=['id', 'Q', 'チーム', '名前', '項目', '詳細', '結果', '点数'])
         st.rerun()
 
@@ -111,8 +146,7 @@ with tab_input:
             qs = st.session_state.history.groupby(['チーム', 'Q'])['点数'].sum().unstack(fill_value=0).reindex(index=[home_name, away_name], columns=["1Q", "2Q", "3Q", "4Q", "OT"], fill_value=0)
             qs['Total'] = qs.sum(axis=1); st.table(qs.astype(int))
         except: pass
-    st.session_state.current_q = st.radio("Q", ["1Q", "2Q", "3Q", "4Q", "OT"], horizontal=True)
-    st.divider()
+    st.session_state.current_q = st.radio("Q", ["1Q", "2Q", "3Q", "4Q", "OT"], horizontal=True, label_visibility="collapsed")
 
     # HOME：オンコートのみ
     st.write(f"🔵 **{home_name}**")
@@ -154,7 +188,6 @@ with tab_input:
         elif st.session_state.mode == "エリア選択":
             it = st.session_state.tmp.get('item', '2P')
             st.write(f"🎯 {it} エリア")
-            
             if it == "2P":
                 r1, r2, r3 = st.columns(3), st.columns(3), st.columns(5)
                 areas = ["左下", "中下", "右下", "左レ", "中レ", "右レ", "左角", "左45", "中", "右45", "右角"]
@@ -183,11 +216,9 @@ with tab_input:
             item = st.session_state.tmp.get('item', '2P')
             pts = {"2P": 2, "3P": 3, "FT": 1}.get(item, 0)
             
-            # --- ★自動アシスト連携機能 ---
             if sc[0].button("SUCCESS", use_container_width=True, type="primary"):
                 record(item, detail=st.session_state.tmp.get('area','-'), res="成功", pts=pts)
-                if item in ["2P", "3P"]:
-                    st.session_state.mode = "アシスト選択"
+                if item in ["2P", "3P"]: st.session_state.mode = "アシスト選択"
                 st.rerun()
                 
             if sc[1].button("MISS", use_container_width=True): 
@@ -196,7 +227,6 @@ with tab_input:
             if st.button("戻る", use_container_width=True): 
                 st.session_state.mode="エリア選択" if "P" in item else "項目選択"; st.rerun()
 
-        # --- ★アシスト選択画面 ---
         elif st.session_state.mode == "アシスト選択":
             scorer = st.session_state.tmp.get('player')
             t_name = st.session_state.tmp.get('team')
