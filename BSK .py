@@ -4,7 +4,7 @@ import io
 import re
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V07.8", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V07.9", layout="centered")
 
 # --- 0. CSS注入 ---
 st.markdown("""
@@ -73,7 +73,7 @@ def load_csv_data():
                 st.session_state.home_name = csv_h
                 st.session_state.away_name = csv_a
                 
-                # ★修正：ログにある名前「そのまま（末尾の番だけ消す）」を抽出して名簿を完全上書き
+                # ログにある名前「そのまま」を抽出して名簿を完全上書き
                 def extract_exact_players(team_name):
                     p_list = df[df['チーム'] == team_name]['名前'].dropna().unique()
                     res = []
@@ -87,7 +87,7 @@ def load_csv_data():
                 h_p = extract_exact_players(csv_h)
                 if h_p:
                     st.session_state.r_str_h = ",".join(h_p)
-                    st.session_state.act_h = h_p[:5]  # とりあえず最初の5人をオンコートに
+                    st.session_state.act_h = h_p[:5]
                     
                 a_p = extract_exact_players(csv_a)
                 if a_p:
@@ -107,7 +107,6 @@ with st.sidebar:
     st.divider()
     
     # === HOME ===
-    # ★修正：ウィジェットの key と st.session_state の変数を完全一致させる
     st.text_input("自チーム名", key="home_name")
     
     new_h = st.text_input(f"🔵 新規選手を追加", placeholder="例: 13。")
@@ -124,7 +123,6 @@ with st.sidebar:
     with st.expander(f"👥 {st.session_state.home_name} 名簿を手動編集"):
         st.text_area("全背番号 (カンマ区切り)", key="r_str_h")
     
-    # オプションリストの準備と整合性チェック
     all_h = [x.strip() for x in st.session_state.r_str_h.split(",") if x.strip()]
     valid_act_h = [x for x in st.session_state.act_h if x in all_h]
     if st.session_state.act_h != valid_act_h:
@@ -321,8 +319,9 @@ with tab_report:
                 to = pdf[pdf['項目']=='TO']; tv, dd, pm, s24 = len(to[to['詳細']=='TV']), len(to[to['詳細']=='DD']), len(to[to['詳細']=='PM']), len(to[to['詳細']=='24S'])
                 p = pdf['点数'].sum()
                 tp+=p; tm2i+=m2i; tm2a+=m2a; tm3i+=m3i; tm3a+=m3a; tfi+=fi; tfa+=fa; tor+=orb; tdr+=drb; tast+=ast; tstl+=stl; tf+=f; ttv+=tv; tdd+=dd; tpm+=pm; ts24+=s24
+                # ★修正：ここの Stl を stl に修正しました！
                 rows.append({'#': p_num, 'Pts': p, 'FG\n(M/A)': fmt_stat(m2i+m3i, m2a+m3a), '3P\n(M/A)': fmt_stat(m3i, m3a), 'FT\n(M/A)': fmt_stat(fi, fa), 
-                             'REB\n(D/O)': f"{drb+orb}\n({drb}/{orb})", 'As': ast, 'St': Stl, 'F': f, 'TO\n(T/D/P/2)': f"{tv+dd+pm+s24}\n({tv}/{dd}/{pm}/{s24})", 'Team': t_name})
+                             'REB\n(D/O)': f"{drb+orb}\n({drb}/{orb})", 'As': ast, 'St': stl, 'F': f, 'TO\n(T/D/P/2)': f"{tv+dd+pm+s24}\n({tv}/{dd}/{pm}/{s24})", 'Team': t_name})
             rows.append({'#': 'Total', 'Pts': tp, 'FG\n(M/A)': fmt_stat(tm2i+tm3i, tm2a+tm3a), '3P\n(M/A)': fmt_stat(tm3i, tm3a), 'FT\n(M/A)': fmt_stat(tfi, tfa), 
                          'REB\n(D/O)': f"{tdr+tor}\n({tdr}/{tor})", 'As': tast, 'St': tstl, 'F': tf, 'TO\n(T/D/P/2)': f"{ttv+tdd+tpm+ts24}\n({ttv}/{tdd}/{tpm}/{ts24})", 'Team': t_name})
             return pd.DataFrame(rows)
