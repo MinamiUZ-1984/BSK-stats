@@ -3,7 +3,7 @@ import pandas as pd
 import io
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V07.3", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V07.4", layout="centered")
 
 # --- 0. CSS注入 ---
 st.markdown("""
@@ -32,11 +32,10 @@ if 'act_h' not in st.session_state: st.session_state.act_h = ["4","5","6","7","8
 if 'r_str_a' not in st.session_state: st.session_state.r_str_a = "4,5,6,7,8,9,10,11,12,13,14,15"
 if 'act_a' not in st.session_state: st.session_state.act_a = ["4","5","6","7","8"]
 
-# --- ★新規：CSV読み込み処理用関数 ---
+# --- CSV読み込み処理用関数 ---
 def load_csv_data():
     if st.session_state.uploaded_file is not None:
         try:
-            # bytesデータを読み込む
             file_bytes = st.session_state.uploaded_file.getvalue()
             df = pd.read_csv(io.BytesIO(file_bytes))
             
@@ -84,10 +83,10 @@ with st.sidebar:
     st.divider()
     
     # === HOME ===
-    # State変数を直接キーに紐付ける
     st.text_input("自チーム名", key="home_name")
     
-    new_h = st.text_input(f"🔵 新規選手を追加", placeholder="例: 99")
+    # ★修正：key="in_h" を追加して重複を防止
+    new_h = st.text_input(f"🔵 新規選手を追加", placeholder="例: 99", key="in_h")
     if st.button("＋追加＆出場", key="add_h", use_container_width=True):
         if new_h:
             nums = [x.strip() for x in new_h.split(",") if x.strip()]
@@ -99,7 +98,8 @@ with st.sidebar:
             st.rerun()
 
     with st.expander(f"👥 {st.session_state.home_name} 名簿を手動編集"):
-        st.session_state.r_str_h = st.text_area("全背番号 (カンマ区切り)", st.session_state.r_str_h)
+        # ★修正：key="ta_h" を追加して重複エラーを解消！
+        st.session_state.r_str_h = st.text_area("全背番号 (カンマ区切り)", value=st.session_state.r_str_h, key="ta_h")
     
     all_h = [n.strip() for n in st.session_state.r_str_h.split(",") if n.strip()]
     valid_act_h = [x for x in st.session_state.act_h if x in all_h]
@@ -110,7 +110,8 @@ with st.sidebar:
     # === AWAY ===
     st.text_input("相手チーム名", key="away_name")
     
-    new_a = st.text_input(f"🔴 新規選手を追加", placeholder="例: 99")
+    # ★修正：key="in_a" を追加
+    new_a = st.text_input(f"🔴 新規選手を追加", placeholder="例: 99", key="in_a")
     if st.button("＋追加＆出場", key="add_a", use_container_width=True):
         if new_a:
             nums = [x.strip() for x in new_a.split(",") if x.strip()]
@@ -122,7 +123,8 @@ with st.sidebar:
             st.rerun()
 
     with st.expander(f"👥 {st.session_state.away_name} 名簿を手動編集"):
-        st.session_state.r_str_a = st.text_area("全背番号 (カンマ区切り)", st.session_state.r_str_a)
+        # ★修正：key="ta_a" を追加して重複エラーを解消！
+        st.session_state.r_str_a = st.text_area("全背番号 (カンマ区切り)", value=st.session_state.r_str_a, key="ta_a")
     
     all_a = [n.strip() for n in st.session_state.r_str_a.split(",") if n.strip()]
     valid_act_a = [x for x in st.session_state.act_a if x in all_a]
@@ -133,7 +135,6 @@ with st.sidebar:
     # --- 過去データ復元（CSV読み込み）---
     with st.expander("📂 過去データを復元・確認 (CSV読込)"):
         st.write("「詳細ログ」のCSVを選択してください。自動で読み込まれます。")
-        # on_changeでファイルが選ばれた瞬間に読み込み関数を走らせる
         st.file_uploader("詳細ログCSVを選択", type=["csv"], label_visibility="collapsed", key="uploaded_file", on_change=load_csv_data)
     
     st.divider()
