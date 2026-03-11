@@ -2,11 +2,11 @@ import streamlit as st
 import pandas as pd
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V02.2", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V02.4", layout="centered")
 
 # --- 1. データ初期化 ---
 if 'history' not in st.session_state:
-    st.session_state.history = pd.DataFrame(columns=['id', 'Q', 'チーム', '名前', '項目', '詳細', '結果', '点ステ'])
+    st.session_state.history = pd.DataFrame(columns=['id', 'Q', 'チーム', '名前', '項目', '詳細', '結果', '点数'])
 if 'mode' not in st.session_state: st.session_state.mode = "選手選択"
 if 'tmp' not in st.session_state: st.session_state.tmp = {}
 if 'current_q' not in st.session_state: st.session_state.current_q = "1Q"
@@ -116,33 +116,43 @@ with tab_report:
     if st.session_state.history.empty: st.info("データなし")
     else:
         st.title(f"📊 {tournament_name}")
-        st.header("1. スコア")
+        st.header("1. スコア推移")
         try:
             rep_qs = st.session_state.history.groupby(['チーム', 'Q'])['点数'].sum().unstack(fill_value=0).reindex(index=[home_name, away_name], columns=["1Q", "2Q", "3Q", "4Q", "OT"], fill_value=0)
             rep_qs['Total'] = rep_qs.sum(axis=1); st.table(rep_qs.astype(int))
         except: pass
 
-        # --- 2. 個人スタッツ (V02ベース・超スリム化) ---
+        # --- 2. 個人スタッツ (V02.4：TO内訳集約版) ---
         st.header("2. 個人スタッツ")
         def build_box(t_name, p_list_source):
             df = st.session_state.history[st.session_state.history['チーム'] == t_name]
             rows = []
             for p_num in p_list_source:
                 p_name = f"{p_num}番"; pdf = df[df['名前'] == p_name]
+                # FG / 3P / FT
                 m2i, m2a = len(pdf[(pdf['項目']=='2P') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='2P'])
                 m3i, m3a = len(pdf[(pdf['項目']=='3P') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='3P'])
                 fti, fta = len(pdf[(pdf['項目']=='FT') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='FT'])
-                orb, drb = len(pdf[pdf['項目']=='OR']), len(pdf[pdf['項目']=='DR'])
-                ast, stl, to, foul = len(pdf[pdf['項目']=='AST']), len(pdf[pdf['項目']=='STL']), len(pdf[pdf['項目']=='TO']), len(pdf[pdf['項目']=='Foul'])
+                
+                # TO内訳算出
+                to_pdf = pdf[pdf['項目']=='TO']
+                tv = len(to_pdf[to_pdf['詳細']=='TV'])
+                dd = len(to_pdf[to_pdf['詳細']=='DD'])
+                pm = len(to_pdf[to_pdf['詳細']=='PM'])
+                s24 = len(to_pdf[to_pdf['詳細']=='24S'])
+                to_total = tv + dd + pm + s24
                 
                 rows.append({
                     '#': p_num, 'Pts': pdf['点数'].sum(),
-                    'M': m2i+m3i, 'A': m2a+m3a, '%': f"{((m2i+m3i)/(m2a+m3a)*100):.0f}%" if (m2a+m3a)>0 else "0%",
-                    '3M': m3i, '3A': m3a, 'Fm': fti, 'Fa': fta,
-                    'OR': orb, 'DR': drb, 'RB': orb+drb, 'As': ast, 'St': stl, 'F': foul, 'TO': to
+                    'FG(M/A)': f"{m2i+m3i}/{m2a+m3a}", 
+                    '3P(M/A)': f"{m3i}/{m3a}", 
+                    'FT(M/A)': f"{fti}/{fta}",
+                    'REB(O/D)': f"{len(pdf[pdf['項目']=='OR'])}/{len(pdf[pdf['項目']=='DR'])}",
+                    'As': len(pdf[pdf['項目']=='AST']), 'St': len(pdf[pdf['項目']=='STL']), 'F': len(pdf[pdf['項目']=='Foul']),
+                    'TO(T/D/P/2S)': f"{to_total}({tv}/{dd}/{pm}/{s24})"
                 })
             st.write(f"### {t_name}")
-            # st.tableは横幅に合わせて文字を詰め込んでくれる
+            # 表をコンパクトに表示
             st.table(pd.DataFrame(rows).set_index('#'))
 
         build_box(home_name, home_players); build_box(away_name, away_players)
