@@ -2,9 +2,9 @@ import streamlit as st
 import pandas as pd
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V03.9", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V05.0", layout="centered")
 
-# --- 0. CSS注入 (安定していたV03.9のレイアウト) ---
+# --- 0. CSS注入 (安定のV03.9レイアウトを完全継承) ---
 st.markdown("""
     <style>
     [data-testid="stHorizontalBlock"] { flex-direction: row !important; flex-wrap: nowrap !important; gap: 0.3rem !important; }
@@ -111,14 +111,30 @@ with tab_input:
         elif st.session_state.mode == "エリア選択":
             it = st.session_state.tmp.get('item', '2P')
             st.write(f"🎯 {it} エリア")
-            r1, r2, r3 = st.columns(3), st.columns(3), st.columns(5)
-            areas = ["左下", "中下", "右下", "左レ", "中レ", "右レ", "左角", "左45", "中", "右45", "右角"]
-            for i in range(3):
-                if r1[i].button(areas[i], use_container_width=True): st.session_state.tmp['area']=areas[i]; st.session_state.mode="結果選択"; st.rerun()
-            for i in range(3):
-                if r2[i].button(areas[i+3], use_container_width=True): st.session_state.tmp['area']=areas[i+3]; st.session_state.mode="結果選択"; st.rerun()
-            for i in range(5):
-                if r3[i].button(areas[i+6], use_container_width=True): st.session_state.tmp['area']=areas[i+6]; st.session_state.mode="結果選択"; st.rerun()
+            
+            if it == "2P":
+                # 2Pは全エリア表示
+                r1, r2, r3 = st.columns(3), st.columns(3), st.columns(5)
+                areas = ["左下", "中下", "右下", "左レ", "中レ", "右レ", "左角", "左45", "中", "右45", "右角"]
+                for i in range(3):
+                    if r1[i].button(areas[i], use_container_width=True): st.session_state.tmp['area']=areas[i]; st.session_state.mode="結果選択"; st.rerun()
+                for i in range(3):
+                    if r2[i].button(areas[i+3], use_container_width=True): st.session_state.tmp['area']=areas[i+3]; st.session_state.mode="結果選択"; st.rerun()
+                for i in range(5):
+                    if r3[i].button(areas[i+6], use_container_width=True): st.session_state.tmp['area']=areas[i+6]; st.session_state.mode="結果選択"; st.rerun()
+            
+            else:
+                # 3Pは外周5ヶ所のみ。ボタン幅を大きく保つため、3列構成を2段重ねる
+                st.info("外周エリアを選択")
+                r_3p_1 = st.columns(3)
+                if r_3p_1[0].button("左角", use_container_width=True): st.session_state.tmp['area']="左角"; st.session_state.mode="結果選択"; st.rerun()
+                if r_3p_1[1].button("左45", use_container_width=True): st.session_state.tmp['area']="左45"; st.session_state.mode="結果選択"; st.rerun()
+                if r_3p_1[2].button("中", use_container_width=True): st.session_state.tmp['area']="中"; st.session_state.mode="結果選択"; st.rerun()
+                
+                r_3p_2 = st.columns(3) # 3列で作成して2個配置することで、上の段と全く同じボタンサイズになる
+                if r_3p_2[0].button("右45", use_container_width=True): st.session_state.tmp['area']="右45"; st.session_state.mode="結果選択"; st.rerun()
+                if r_3p_2[1].button("右角", use_container_width=True): st.session_state.tmp['area']="右角"; st.session_state.mode="結果選択"; st.rerun()
+
             if st.button("戻る", use_container_width=True): st.session_state.mode="項目選択"; st.rerun()
             
         elif st.session_state.mode == "結果選択":
@@ -140,7 +156,7 @@ with tab_input:
             if cols_a[i].button(p_num, key=f"a_{p_num}", use_container_width=True):
                 st.session_state.tmp = {'player': p_num, 'team': away_name}; st.session_state.mode = "項目選択"; st.rerun()
 
-# 【タブ2】レポート (全選手表示 ＆ Team列非表示)
+# 【タブ2】レポート (全選手表示 ＆ Team列非表示 ＆ 詳細ログ完備)
 with tab_report:
     if st.session_state.history.empty: st.info("データなし")
     else:
@@ -184,7 +200,7 @@ with tab_report:
         st.header("3. 詳細ログ")
         st.dataframe(st.session_state.history.iloc[::-1], use_container_width=True)
         
-        # CSV保存 (Team列ありで出力)
+        # CSV保存
         csv_stats = pd.concat([h_df, a_df], ignore_index=True).to_csv(index=False).encode('utf_8_sig')
         st.download_button("📊 統計CSV保存", csv_stats, f"{tournament_name}_stats.csv", "text/csv")
         csv_log = st.session_state.history.to_csv(index=False).encode('utf_8_sig')
