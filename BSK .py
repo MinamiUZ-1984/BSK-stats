@@ -2,19 +2,24 @@ import streamlit as st
 import pandas as pd
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V02.9", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V03.4", layout="centered")
 
-# --- 0. CSS注入 (iPhoneレイアウト & テーブル縮小) ---
+# --- 0. CSS注入 (V02.9の安定設定 + ヘッダー改行許可) ---
 st.markdown("""
     <style>
-    /* 記録入力のボタン並びを強制 */
+    /* 記録入力のボタン並びを強制 (V02.9準拠) */
     [data-testid="stHorizontalBlock"] { flex-direction: row !important; flex-wrap: nowrap !important; gap: 0.3rem !important; }
     [data-testid="stHorizontalBlock"] > div { width: 100% !important; flex: 1 1 0% !important; min-width: 0px !important; }
     .stButton > button { padding: 5px 2px !important; font-size: 13px !important; width: 100% !important; }
     
-    /* レポートの表をiPhone幅に収めるための設定 */
-    div[data-testid="stTable"] table { font-size: 10px !important; width: 100% !important; }
-    div[data-testid="stTable"] th, div[data-testid="stTable"] td { padding: 2px 1px !important; text-align: center !important; }
+    /* レポートの表設定 (V02.9のサイズ感 + 改行対応) */
+    div[data-testid="stTable"] table { font-size: 10px !important; width: 100% !important; table-layout: fixed; }
+    div[data-testid="stTable"] th, div[data-testid="stTable"] td { 
+        padding: 2px 1px !important; 
+        text-align: center !important; 
+        white-space: pre-wrap !important; /* 項目内の \n を有効化 */
+        line-height: 1.1 !important;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -67,8 +72,7 @@ with tab_input:
 
     st.write(f"🔵 **{home_name}**")
     for i in range(0, len(home_players), 5):
-        row_players = home_players[i:i+5]
-        cols = st.columns(5)
+        row_players = home_players[i:i+5]; cols = st.columns(5)
         for idx, p_num in enumerate(row_players):
             if cols[idx].button(p_num, key=f"h_{p_num}", use_container_width=True):
                 st.session_state.tmp = {'player': p_num, 'team': home_name}; st.session_state.mode = "項目選択"; st.rerun()
@@ -132,48 +136,59 @@ with tab_input:
             if cols[idx].button(p_num, key=f"a_{p_num}", use_container_width=True):
                 st.session_state.tmp = {'player': p_num, 'team': away_name}; st.session_state.mode = "項目選択"; st.rerun()
 
-# --- 【タブ2】分析レポート ---
+# --- 【タブ2】分析レポート (V02.9 構成の完全復旧) ---
 with tab_report:
     if st.session_state.history.empty: st.info("データなし")
     else:
         st.title(f"📊 {tournament_name}")
         
-        # 1. スコア推移
+        # 1. スコア推移 (V02.9から復旧)
         st.header("1. スコア")
         try:
             rep_qs = st.session_state.history.groupby(['チーム', 'Q'])['点数'].sum().unstack(fill_value=0).reindex(index=[home_name, away_name], columns=["1Q", "2Q", "3Q", "4Q", "OT"], fill_value=0)
             rep_qs['Total'] = rep_qs.sum(axis=1); st.table(rep_qs.astype(int))
         except: pass
 
-        # 2. 個人スタッツ作成関数
+        # 2. 個人スタッツ作成関数 (改行ヘッダー & B追加版)
         def get_stats_df(t_name, p_list):
             df = st.session_state.history[st.session_state.history['チーム'] == t_name]
             rows = []
-            tp, tm2i, tm2a, tm3i, tm3a, tfi, tfa, tor, tdr, tast, tstl, tf, ttv, tdd, tpm, ts24 = [0]*16
-            
+            tp, tm2i, tm2a, tm3i, tm3a, tfi, tfa, tor, tdr, tast, tstl, tblk, tf, ttv, tdd, tpm, ts24 = [0]*17
+            def fmt_stat(m, a): return f"{m}/{a}\n{(m/a*100):.0f}%" if a > 0 else "0/0\n0%"
+
             for p_num in p_list:
                 pn = f"{p_num}番"; pdf = df[df['名前'] == pn]
                 m2i, m2a = len(pdf[(pdf['項目']=='2P') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='2P'])
                 m3i, m3a = len(pdf[(pdf['項目']=='3P') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='3P'])
                 fi, fa = len(pdf[(pdf['項目']=='FT') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='FT'])
                 orb, drb = len(pdf[pdf['項目']=='OR']), len(pdf[pdf['項目']=='DR'])
-                ast, stl, f = len(pdf[pdf['項目']=='AST']), len(pdf[pdf['項目']=='STL']), len(pdf[pdf['項目']=='Foul'])
+                ast, stl, blk, f = len(pdf[pdf['項目']=='AST']), len(pdf[pdf['項目']=='STL']), len(pdf[pdf['項目']=='BLK']), len(pdf[pdf['項目']=='Foul'])
                 to = pdf[pdf['項目']=='TO']
                 tv, dd, pm, s24 = len(to[to['詳細']=='TV']), len(to[to['詳細']=='DD']), len(to[to['詳細']=='PM']), len(to[to['詳細']=='24S'])
                 p = pdf['点数'].sum()
 
-                tp+=p; tm2i+=m2i; tm2a+=m2a; tm3i+=m3i; tm3a+=m3a; tfi+=fi; tfa+=fa; tor+=orb; tdr+=drb; tast+=ast; tstl+=stl; tf+=f; ttv+=tv; tdd+=dd; tpm+=pm; ts24+=s24
+                tp+=p; tm2i+=m2i; tm2a+=m2a; tm3i+=m3i; tm3a+=m3a; tfi+=fi; tfa+=fa; tor+=orb; tdr+=drb; tast+=ast; tstl+=stl; tblk+=blk; tf+=f; ttv+=tv; tdd+=dd; tpm+=pm; ts24+=s24
                 
                 rows.append({
-                    '#': p_num, 'Pts': p, 'FG': f"{m2i+m3i}/{m2a+m3a} {(m2i+m3i)/(m2a+m3a)*100:.0f}%" if (m2a+m3a)>0 else "0/0 0%",
-                    '3P': f"{m3i}/{m3a} {m3i/m3a*100:.0f}%" if m3a>0 else "0/0 0%", 'FT': f"{fi}/{fa} {fi/fa*100:.0f}%" if fa>0 else "0/0 0%",
-                    'REB': f"{orb+drb}({orb}/{drb})", 'As': ast, 'St': stl, 'F': f, 'TO': f"{tv+dd+pm+s24}({tv}/{dd}/{pm}/{s24})", 'Team': t_name
+                    '#': p_num, 'Pts': p, 
+                    'FG\n(M/A/%)': fmt_stat(m2i+m3i, m2a+m3a), 
+                    '3P\n(M/A/%)': fmt_stat(m3i, m3a), 
+                    'FT\n(M/A/%)': fmt_stat(fi, fa), 
+                    'REB\n(D/O)': f"{drb+orb}\n({drb}/{orb})", 
+                    'As': ast, 'St': stl, 'B': blk, 'F': f, 
+                    'TO\n(T/D/P/2)': f"{tv+dd+pm+s24}\n({tv}/{dd}/{pm}/{s24})", 
+                    'Team': t_name
                 })
             
             rows.append({
-                '#': 'TOTAL', 'Pts': tp, 'FG': f"{tm2i+tm3i}/{tm2a+tm3a} {(tm2i+tm3i)/(tm2a+tm3a)*100:.0f}%" if (tm2a+tm3a)>0 else "0/0 0%",
-                '3P': f"{tm3i}/{tm3a} {tm3i/tm3a*100:.0f}%" if tm3a>0 else "0/0 0%", 'FT': f"{tfi}/{tfa} {tfi/tfa*100:.0f}%" if tfa>0 else "0/0 0%",
-                'REB': f"{tor+tdr}({tor}/{tdr})", 'As': tast, 'St': tstl, 'F': tf, 'TO': f"{ttv+tdd+tpm+ts24}({ttv}/{tdd}/{tpm}/{ts24})", 'Team': t_name
+                '#': 'TOTAL', 'Pts': tp, 
+                'FG\n(M/A/%)': fmt_stat(tm2i+tm3i, tm2a+tm3a), 
+                '3P\n(M/A/%)': fmt_stat(tm3i, tm3a), 
+                'FT\n(M/A/%)': fmt_stat(tfi, tfa), 
+                'REB\n(D/O)': f"{tdr+tor}\n({tdr}/{tor})", 
+                'As': tast, 'St': tstl, 'B': tblk, 'F': tf, 
+                'TO\n(T/D/P/2)': f"{ttv+tdd+tpm+ts24}\n({ttv}/{tdd}/{tpm}/{ts24})", 
+                'Team': t_name
             })
             return pd.DataFrame(rows)
 
@@ -181,12 +196,10 @@ with tab_report:
         h_stats = get_stats_df(home_name, home_players)
         a_stats = get_stats_df(away_name, away_players)
         
-        st.write(f"🔵 **{home_name}**")
-        st.table(h_stats.drop(columns='Team').set_index('#'))
-        st.write(f"🔴 **{away_name}**")
-        st.table(a_stats.drop(columns='Team').set_index('#'))
+        st.write(f"🔵 **{home_name}**"); st.table(h_stats.drop(columns='Team').set_index('#'))
+        st.write(f"🔴 **{away_name}**"); st.table(a_stats.drop(columns='Team').set_index('#'))
 
-        # CSV出力ボタン（統合版）
+        # CSV出力ボタン
         all_stats = pd.concat([h_stats, a_stats], ignore_index=True)
         csv_stats = all_stats.to_csv(index=False).encode('utf_8_sig')
         st.download_button("📊 個人スタッツCSV保存", csv_stats, f"{tournament_name}_stats.csv", "text/csv")
