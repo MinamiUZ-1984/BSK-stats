@@ -37,13 +37,14 @@ with st.sidebar:
         st.rerun()
 
 # --- 3. 共通記録関数 ---
-def record(item, detail="-", res="成功", pts=0):
-    if 'player' not in st.session_state.tmp: return
+def record(item, detail="-", res="成功", pts=0, team=None, name=None):
+    t_name = team if team else st.session_state.tmp.get('team', 'UNKNOWN')
+    p_name = name if name else (f"{st.session_state.tmp['player']}番" if 'player' in st.session_state.tmp else "TEAM")
+    
     new_id = st.session_state.history['id'].max() + 1 if not st.session_state.history.empty else 1
     new_row = pd.DataFrame([{
         'id': new_id, 'Q': st.session_state.current_q, 
-        'チーム': st.session_state.tmp['team'], 
-        '名前': f"{st.session_state.tmp['player']}番", 
+        'チーム': t_name, '名前': p_name, 
         '項目': item, '詳細': detail, '結果': res, '点数': pts
     }])
     st.session_state.history = pd.concat([st.session_state.history, new_row], ignore_index=True)
@@ -66,18 +67,21 @@ with tab_input:
     st.session_state.current_q = st.radio("Q", ["1Q", "2Q", "3Q", "4Q", "OT"], horizontal=True, label_visibility="collapsed")
     st.divider()
 
-    # --- 自チーム選手 ---
+    # --- 自チーム選手 (HOME) ---
     st.write(f"🔵 **{home_name}**")
     h_cols = st.columns(5)
     for i, p_num in enumerate(home_players):
         if h_cols[i % 5].button(p_num, key=f"h_{p_num}", use_container_width=True):
             st.session_state.tmp = {'player': p_num, 'team': home_name}; st.session_state.mode = "項目選択"
+    
+    if st.button(f"⏰ {home_name} タイムアウト", use_container_width=True):
+        record("TOUT", team=home_name, name="TEAM")
 
-    # --- 操作パネル ---
+    # --- 操作パネル (MIDDLE) ---
     st.divider()
     with st.container(border=True):
         if st.session_state.mode == "選手選択":
-            st.info("上下の選手をタップして記録開始")
+            st.info("選手をタップしてください")
         elif st.session_state.mode == "項目選択":
             st.subheader(f"⚡ {st.session_state.tmp.get('team')} #{st.session_state.tmp.get('player')}")
             c = st.columns(3)
@@ -86,15 +90,21 @@ with tab_input:
             if c[2].button("FT", use_container_width=True): st.session_state.tmp['item']="FT"; st.session_state.mode="結果選択"; st.rerun()
             
             o = st.columns(4)
-            if o[0].button("OR", use_container_width=True): record("OR"); st.rerun()
-            if o[0].button("DR", use_container_width=True): record("DR"); st.rerun()
-            if o[1].button("AST", use_container_width=True): record("AST"); st.rerun()
-            if o[1].button("STL", use_container_width=True): record("STL"); st.rerun()
-            if o[2].button("F", use_container_width=True): record("Foul"); st.rerun()
-            if o[2].button("BLK", use_container_width=True): record("BLK"); st.rerun()
-            if o[3].button("TV", use_container_width=True): record("TO", "TV"); st.rerun()
-            if o[3].button("DD", use_container_width=True): record("TO", "DD"); st.rerun()
-            if o[3].button("PM", use_container_width=True): record("TO", "PM"); st.rerun()
+            with o[0]:
+                if st.button("OR", use_container_width=True): record("OR"); st.rerun()
+                if st.button("DR", use_container_width=True): record("DR"); st.rerun()
+            with o[1]:
+                if st.button("AST", use_container_width=True): record("AST"); st.rerun()
+                if st.button("STL", use_container_width=True): record("STL"); st.rerun()
+            with o[2]:
+                if st.button("F", use_container_width=True): record("Foul"); st.rerun()
+                if st.button("BLK", use_container_width=True): record("BLK"); st.rerun()
+            with o[3]:
+                if st.button("TV", use_container_width=True): record("TO", "TV"); st.rerun()
+                if st.button("DD", use_container_width=True): record("TO", "DD"); st.rerun()
+                if st.button("PM", use_container_width=True): record("TO", "PM"); st.rerun()
+                if st.button("24S", use_container_width=True): record("TO", "24S"); st.rerun()
+            
             if st.button("キャンセル", use_container_width=True): st.session_state.mode="選手選択"; st.rerun()
 
         elif st.session_state.mode == "エリア選択":
@@ -122,6 +132,11 @@ with tab_input:
             if st.button("戻る"): st.session_state.mode="エリア選択" if "P" in st.session_state.tmp.get('item','') else "項目選択"; st.rerun()
 
     st.divider()
+
+    # --- 相手チーム選手 (AWAY) ---
+    if st.button(f"⏰ {away_name} タイムアウト", use_container_width=True):
+        record("TOUT", team=away_name, name="TEAM")
+
     st.write(f"🔴 **{away_name}**")
     a_cols = st.columns(5)
     for i, p_num in enumerate(away_players):
@@ -131,7 +146,7 @@ with tab_input:
 # --- 【タブ2】分析レポート ---
 with tab_report:
     if st.session_state.history.empty:
-        st.info("データが記録されるとここにレポートが表示されます。")
+        st.info("データなし")
     else:
         st.title(f"📊 {tournament_name}")
         st.caption(f"{game_date} | {home_name} vs {away_name}")
@@ -145,7 +160,7 @@ with tab_report:
             st.table(rep_qs.astype(int))
         except: st.warning("集計中...")
 
-        # 2. 個人ボックススコア (詳細版)
+        # 2. 個人ボックススコア
         st.header("2. 個人スタッツ")
         def build_box(t_name, p_list_source):
             df = st.session_state.history[st.session_state.history['チーム'] == t_name]
@@ -153,39 +168,27 @@ with tab_report:
             for p_num in p_list_source:
                 p_name = f"{p_num}番"
                 pdf = df[df['名前'] == p_name]
-                
-                # シュート
                 m2in, m2at = len(pdf[(pdf['項目']=='2P') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='2P'])
                 m3in, m3at = len(pdf[(pdf['項目']=='3P') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='3P'])
                 ftin, ftat = len(pdf[(pdf['項目']=='FT') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='FT'])
-                
-                # リバウンド内訳
-                orb = len(pdf[pdf['項目']=='OR'])
-                drb = len(pdf[pdf['項目']=='DR'])
-                
-                # TO内訳
+                orb, drb = len(pdf[pdf['項目']=='OR']), len(pdf[pdf['項目']=='DR'])
                 to_tv = len(pdf[(pdf['項目']=='TO') & (pdf['詳細']=='TV')])
                 to_dd = len(pdf[(pdf['項目']=='TO') & (pdf['詳細']=='DD')])
                 to_pm = len(pdf[(pdf['項目']=='TO') & (pdf['詳細']=='PM')])
-                
+                to_24s = len(pdf[(pdf['項目']=='TO') & (pdf['詳細']=='24S')]) # 追加
                 pts, ast, stl = pdf['点数'].sum(), len(pdf[pdf['項目']=='AST']), len(pdf[pdf['項目']=='STL'])
-                eff = pts + (orb + drb) + ast + stl - (to_tv + to_dd + to_pm)
-                
+                eff = pts + (orb + drb) + ast + stl - (to_tv + to_dd + to_pm + to_24s)
                 rows.append({
                     'No.': p_name, 'PTS': pts, 'FG': f"{m2in+m3in}-{m2at+m3at}", '3P': f"{m3in}-{m3at}", 'FT': f"{ftin}-{ftat}",
-                    'OR': orb, 'DR': drb, 'REB': orb+drb,
-                    'AST': ast, 'STL': stl, 'F': len(pdf[pdf['項目']=='Foul']),
-                    'TO計': to_tv+to_dd+to_pm, 'TV': to_tv, 'DD': to_dd, 'PM': to_pm,
-                    '_eff': eff
+                    'OR': orb, 'DR': drb, 'REB': orb+drb, 'AST': ast, 'STL': stl, 'F': len(pdf[pdf['項目']=='Foul']),
+                    'TO計': to_tv+to_dd+to_pm+to_24s, 'TV': to_tv, 'DD': to_dd, 'PM': to_pm, '24S': to_24s, '_eff': eff
                 })
-            
             box_df = pd.DataFrame(rows)
             max_eff = box_df['_eff'].max()
             box_df['MVP'] = box_df['_eff'].apply(lambda x: "👑" if x == max_eff and x > 0 else "")
-            
             st.write(f"### {t_name}")
-            # 表示する列を指定
-            display_cols = ['MVP', 'No.', 'PTS', 'FG', '3P', 'FT', 'OR', 'DR', 'REB', 'AST', 'STL', 'F', 'TO計', 'TV', 'DD', 'PM']
+            # 24Sを列に追加
+            display_cols = ['MVP', 'No.', 'PTS', 'FG', '3P', 'FT', 'OR', 'DR', 'REB', 'AST', 'STL', 'F', 'TO計', 'TV', 'DD', 'PM', '24S']
             st.dataframe(box_df[display_cols].set_index('No.'), use_container_width=True)
 
         build_box(home_name, home_players)
