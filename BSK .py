@@ -2,10 +2,9 @@ import streamlit as st
 import pandas as pd
 import io
 import re
-import unicodedata
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V07.6", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V07.7", layout="centered")
 
 # --- 0. CSS注入 ---
 st.markdown("""
@@ -20,30 +19,10 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- ★新規：強力な文字クリーニング関数 ---
-def clean_player_text(raw_str):
-    if pd.isna(raw_str): return ""
-    s = str(raw_str).strip()
-    # ⑧ -> 8, １３ -> 13 のように全角を半角に強制変換
-    s = unicodedata.normalize('NFKC', s)
-    # 英数字と日本語（漢字カナ等）以外（。、, . などの記号）をすべて削除
-    s = re.sub(r'[^\w]', '', s)
-    return s
-
+# 安全な並び替え関数（「13。」や「⑨」でもエラーにならず、なるべく数字順に並べる）
 def safe_sort_key(x):
-    # 文字列の中から数字の部分だけを抜き出して並べ替え（エラー回避）
     m = re.search(r'\d+', str(x))
-    return int(m.group()) if m else 99999
-
-# カンマや空白、読点などでリストを分割して綺麗にする関数
-def parse_roster_string(raw_str):
-    raw_list = re.split(r'[,，、\s]+', str(raw_str))
-    res = []
-    for x in raw_list:
-        c = clean_player_text(x)
-        if c and c not in res:
-            res.append(c)
-    return sorted(res, key=safe_sort_key)
+    return (0, int(m.group()), str(x)) if m else (1, 0, str(x))
 
 # --- 1. データ初期化 ---
 if 'history' not in st.session_state: st.session_state.history = pd.DataFrame(columns=['id', 'Q', 'チーム', '名前', '項目', '詳細', '結果', '点数'])
@@ -66,18 +45,9 @@ def load_csv_data():
             df = pd.read_csv(io.BytesIO(file_bytes))
             
             if set(['id', 'Q', 'チーム', '名前', '項目', '詳細', '結果', '点数']).issubset(df.columns):
-                # チーム名クリーニング
+                # チーム名や記号を勝手に消さず、最低限の空白除去だけ行う
                 df['チーム'] = df['チーム'].astype(str).str.strip()
-                
-                # ★修正：名前欄に混入した記号や⑧を完全にクリーンアップ
-                def fix_csv_name(n):
-                    n_str = str(n).replace('番', '').strip()
-                    if n_str.upper() in ['TEAM', 'UNKNOWN', 'NAN', 'NONE', '']:
-                        return 'TEAM'
-                    c = clean_player_text(n_str)
-                    return f"{c}番" if c else 'TEAM'
-                
-                df['名前'] = df['名前'].apply(fix_csv_name)
+                df['名前'] = df['名前'].astype(str).str.strip()
                 df['項目'] = df['項目'].astype(str).str.strip()
                 df['詳細'] = df['詳細'].astype(str).str.strip()
                 df['結果'] = df['結果'].astype(str).str.strip()
@@ -86,29 +56,47 @@ def load_csv_data():
                 st.session_state.history = df
                 
                 teams = [t for t in df['チーム'].unique() if t and str(t).upper() != 'UNKNOWN']
-                if len(teams) > 0: st.session_state.team_h_name = teams[0]
-                if len(teams) > 1: st.session_state.team_a_name = teams[1]
                 
-                def extract_players(team_name):
+                # HOME/AWAYの割り当て
+                csv_h = st.session_state.team_h_name
+                csv_a = st.session_state.team_a_name
+                if len(teams) == 1:
+                    if teams[0] != csv_a: csv_h = teams[0]
+                    else: csv_a = teams[0]
+                elif len(teams) >= 2:
+                    if st.session_state.team_h_name in teams:
+                        csv_h = st.session_state.team_h_name
+                        csv_a = [t for t in teams if t != csv_h][0]
+                    elif st.session_state.team_a_name in teams:
+                        csv_a = st.session_state.team_a_name
+                        csv_h = [t for t in teams if t != csv_a][0]
+                    else:
+                        csv_h, csv_a = teams[0], teams[1]
+
+                st.session_state.team_h_name = csv_h
+                st.session_state.team_a_name = csv_a
+                
+                def extract_exact_players(team_name):
                     p_list = df[df['チーム'] == team_name]['名前'].unique()
-                    extracted = [str(p).replace('番', '').strip() for p in p_list if str(p).upper() not in ['TEAM', 'NAN', 'NONE']]
-                    return sorted([clean_player_text(p) for p in extracted if clean_player_text(p)], key=safe_sort_key)
+                    res = []
+                    for p in p_list:
+                        p_str = str(p).strip()
+                        # 末尾の「番」だけを取り除き、記号や全角はそのまま残す
+                        if p_str.endswith('番'): p_str = p_str[:-1]
+                        if p_str.upper() not in ['TEAM', 'NAN', 'NONE', '']:
+                            res.append(p_str)
+                    return sorted(res, key=safe_sort_key)
                 
-                if len(teams) > 0:
-                    h_p = extract_players(teams[0])
-                    if h_p:
-                        # 既存と合体させる
-                        curr_h = parse_roster_string(st.session_state.r_str_h)
-                        merged_h = sorted(list(set(curr_h + h_p)), key=safe_sort_key)
-                        st.session_state.r_str_h = ",".join(merged_h)
-                        st.session_state.act_h = h_p[:5]
-                if len(teams) > 1:
-                    a_p = extract_players(teams[1])
-                    if a_p:
-                        curr_a = parse_roster_string(st.session_state.r_str_a)
-                        merged_a = sorted(list(set(curr_a + a_p)), key=safe_sort_key)
-                        st.session_state.r_str_a = ",".join(merged_a)
-                        st.session_state.act_a = a_p[:5]
+                # ログに出現した選手「だけ」で名簿を上書きする
+                h_p = extract_exact_players(csv_h)
+                if h_p:
+                    st.session_state.r_str_h = ",".join(h_p)
+                    st.session_state.act_h = h_p[:5]
+                    
+                a_p = extract_exact_players(csv_a)
+                if a_p:
+                    st.session_state.r_str_a = ",".join(a_p)
+                    st.session_state.act_a = a_p[:5]
                         
                 st.toast("✅ データを完全に復元しました！")
             else:
@@ -125,11 +113,12 @@ with st.sidebar:
     # === HOME ===
     st.text_input("自チーム名", key="team_h_name")
     
-    new_h = st.text_input(f"🔵 新規選手を追加", placeholder="例: 99", key="in_h")
+    new_h = st.text_input(f"🔵 新規選手を追加", placeholder="例: 13。", key="in_h")
     if st.button("＋追加＆出場", key="add_h", use_container_width=True):
         if new_h:
-            new_nums = parse_roster_string(new_h)
-            all_h_list = parse_roster_string(st.session_state.r_str_h)
+            # カンマ(,)のみで分割し、記号や全角はそのまま保持
+            new_nums = [x.strip() for x in new_h.split(",") if x.strip()]
+            all_h_list = [x.strip() for x in st.session_state.r_str_h.split(",") if x.strip()]
             for n in new_nums:
                 if n not in all_h_list: all_h_list.append(n)
                 if n not in st.session_state.act_h: st.session_state.act_h.append(n)
@@ -137,9 +126,9 @@ with st.sidebar:
             st.rerun()
 
     with st.expander(f"👥 {st.session_state.team_h_name} 名簿を手動編集"):
-        st.session_state.r_str_h = st.text_area("全背番号 (カンマ等で区切る)", value=st.session_state.r_str_h, key="ta_h")
+        st.session_state.r_str_h = st.text_area("全背番号 (カンマ区切り)", value=st.session_state.r_str_h, key="ta_h")
     
-    all_h = parse_roster_string(st.session_state.r_str_h)
+    all_h = [x.strip() for x in st.session_state.r_str_h.split(",") if x.strip()]
     valid_act_h = [x for x in st.session_state.act_h if x in all_h]
     st.session_state.act_h = st.multiselect(f"🔵 {st.session_state.team_h_name} オンコート", all_h, default=valid_act_h)
     
@@ -148,11 +137,11 @@ with st.sidebar:
     # === AWAY ===
     st.text_input("相手チーム名", key="team_a_name")
     
-    new_a = st.text_input(f"🔴 新規選手を追加", placeholder="例: 99", key="in_a")
+    new_a = st.text_input(f"🔴 新規選手を追加", placeholder="例: ⑨", key="in_a")
     if st.button("＋追加＆出場", key="add_a", use_container_width=True):
         if new_a:
-            new_nums = parse_roster_string(new_a)
-            all_a_list = parse_roster_string(st.session_state.r_str_a)
+            new_nums = [x.strip() for x in new_a.split(",") if x.strip()]
+            all_a_list = [x.strip() for x in st.session_state.r_str_a.split(",") if x.strip()]
             for n in new_nums:
                 if n not in all_a_list: all_a_list.append(n)
                 if n not in st.session_state.act_a: st.session_state.act_a.append(n)
@@ -160,17 +149,17 @@ with st.sidebar:
             st.rerun()
 
     with st.expander(f"👥 {st.session_state.team_a_name} 名簿を手動編集"):
-        st.session_state.r_str_a = st.text_area("全背番号 (カンマ等で区切る)", value=st.session_state.r_str_a, key="ta_a")
+        st.session_state.r_str_a = st.text_area("全背番号 (カンマ区切り)", value=st.session_state.r_str_a, key="ta_a")
     
-    all_a = parse_roster_string(st.session_state.r_str_a)
+    all_a = [x.strip() for x in st.session_state.r_str_a.split(",") if x.strip()]
     valid_act_a = [x for x in st.session_state.act_a if x in all_a]
     st.session_state.act_a = st.multiselect(f"🔴 {st.session_state.team_a_name} オンコート", all_a, default=valid_act_a)
     
     st.divider()
     
-    # --- 過去データ復元（CSV読み込み）---
+    # --- 過去データ復元 ---
     with st.expander("📂 過去データを復元・確認 (CSV読込)"):
-        st.write("「詳細ログ」のCSVを選択してください。自動で読み込まれます。")
+        st.write("「詳細ログ」のCSVを選択してください。")
         st.file_uploader("詳細ログCSVを選択", type=["csv"], label_visibility="collapsed", key="uploaded_file", on_change=load_csv_data)
     
     st.divider()
