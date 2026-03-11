@@ -2,9 +2,9 @@ import streamlit as st
 import pandas as pd
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V03.6", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V03.7", layout="centered")
 
-# --- 0. CSS注入 (TOの端切れを防止) ---
+# --- 0. CSS注入 (V03.6準拠：iPhoneで絶対に端が切れない設定) ---
 st.markdown("""
     <style>
     /* 記録入力のボタン並びを強制 */
@@ -12,7 +12,7 @@ st.markdown("""
     [data-testid="stHorizontalBlock"] > div { width: 100% !important; flex: 1 1 0% !important; min-width: 0px !important; }
     .stButton > button { padding: 5px 2px !important; font-size: 12px !important; width: 100% !important; }
     
-    /* レポートの表設定 (TOが右端で切れないよう、文字サイズを微調整) */
+    /* レポートの表設定 (TOが右端で切れないよう、文字サイズ9pxを維持) */
     div[data-testid="stTable"] table { font-size: 9px !important; width: 100% !important; table-layout: fixed; }
     div[data-testid="stTable"] th, div[data-testid="stTable"] td { 
         padding: 2px 1px !important; 
@@ -30,22 +30,20 @@ if 'history' not in st.session_state:
 if 'mode' not in st.session_state: st.session_state.mode = "選手選択"
 if 'tmp' not in st.session_state: st.session_state.tmp = {}
 if 'current_q' not in st.session_state: st.session_state.current_q = "1Q"
-if 'memo' not in st.session_state: st.session_state.memo = ""
 
 # --- 2. サイドバー設定 ---
 with st.sidebar:
     st.header("🏆 試合設定")
     tournament_name = st.text_input("大会名", "練習試合")
-    game_date = st.date_input("試合日")
     st.divider()
     home_name = st.text_input("自チーム名", "HOME").strip()
     home_players = [n.strip() for n in st.text_area("自チーム背番号", ",".join([str(i) for i in range(4, 24)])).split(",") if n.strip()]
     away_name = st.text_input("相手チーム名", "AWAY").strip()
     away_players = [n.strip() for n in st.text_area("相手チーム背番号", ",".join([str(i) for i in range(4, 24)])).split(",") if n.strip()]
     st.divider()
-    if st.button("全リセット", type="secondary"):
+    if st.button("全データリセット", type="secondary"):
         st.session_state.history = pd.DataFrame(columns=['id', 'Q', 'チーム', '名前', '項目', '詳細', '結果', '点数'])
-        st.session_state.mode = "選手選択"; st.rerun()
+        st.rerun()
 
 # --- 3. 共通記録関数 ---
 def record(item, detail="-", res="成功", pts=0, team=None, name=None):
@@ -57,7 +55,7 @@ def record(item, detail="-", res="成功", pts=0, team=None, name=None):
     st.session_state.mode = "選手選択"; st.toast(f"記録完了")
 
 # --- 4. タブ構成 ---
-tab_input, tab_report, tab_edit = st.tabs(["✍️ 記録入力", "📄 レポート", "🛠 修正"])
+tab_input, tab_report, tab_edit = st.tabs(["✍️ 入力", "📄 統計", "🛠 修正"])
 
 # --- 【タブ1】記録入力 ---
 with tab_input:
@@ -69,7 +67,7 @@ with tab_input:
     st.session_state.current_q = st.radio("Q", ["1Q", "2Q", "3Q", "4Q", "OT"], horizontal=True)
     st.divider()
 
-    # HOME 選手ボタン
+    # HOME
     st.write(f"🔵 **{home_name}**")
     for i in range(0, len(home_players), 5):
         row_players = home_players[i:i+5]; cols = st.columns(5)
@@ -78,17 +76,16 @@ with tab_input:
                 st.session_state.tmp = {'player': p_num, 'team': home_name}; st.session_state.mode = "項目選択"; st.rerun()
     if st.button(f"⏰ {home_name} TOUT", use_container_width=True): record("TOUT", team=home_name, name="TEAM")
 
-    # 操作パネル
     st.divider()
     with st.container(border=True):
-        if st.session_state.mode == "選手選択": st.info("選手をタップ")
+        if st.session_state.mode == "選手選択": st.info("選手を選択")
         elif st.session_state.mode == "項目選択":
-            st.subheader(f"#{st.session_state.tmp.get('player')}")
+            st.write(f"**#{st.session_state.tmp.get('player')}**")
             c = st.columns(3)
             if c[0].button("2P", use_container_width=True, type="primary"): st.session_state.tmp['item']="2P"; st.session_state.mode="エリア選択"; st.rerun()
             if c[1].button("3P", use_container_width=True, type="primary"): st.session_state.tmp['item']="3P"; st.session_state.mode="エリア選択"; st.rerun()
             if c[2].button("FT", use_container_width=True): st.session_state.tmp['item']="FT"; st.session_state.mode="結果選択"; st.rerun()
-            o = st.columns(3) # BLK削除により3列へ
+            o = st.columns(3)
             with o[0]:
                 if st.button("OR", use_container_width=True): record("OR"); st.rerun()
                 if st.button("DR", use_container_width=True): record("DR"); st.rerun()
@@ -97,20 +94,12 @@ with tab_input:
                 if st.button("STL", use_container_width=True): record("STL"); st.rerun()
             with o[2]:
                 if st.button("F", use_container_width=True): record("Foul"); st.rerun()
-                # BLKボタンを削除してスペースを確保
             
             st.write("▼ TurnOver")
             to_cols = st.columns(4)
-            with to_cols[0]:
-                if st.button("TV", use_container_width=True): record("TO", "TV"); st.rerun()
-            with to_cols[1]:
-                if st.button("DD", use_container_width=True): record("TO", "DD"); st.rerun()
-            with to_cols[2]:
-                if st.button("PM", use_container_width=True): record("TO", "PM"); st.rerun()
-            with to_cols[3]:
-                if st.button("24S", use_container_width=True): record("TO", "24S"); st.rerun()
+            for i, val in enumerate([("TV","TV"), ("DD","DD"), ("PM","PM"), ("24S","24S")]):
+                if to_cols[i].button(val[0], use_container_width=True): record("TO", val[1]); st.rerun()
             if st.button("キャンセル", use_container_width=True): st.session_state.mode="選手選択"; st.rerun()
-        # (エリア選択・結果選択は変更なし)
         elif st.session_state.mode == "エリア選択":
             it = st.session_state.tmp.get('item', '2P')
             r1, r2, r3 = st.columns(3), st.columns(3), st.columns(5)
@@ -142,13 +131,13 @@ with tab_input:
 with tab_report:
     if st.session_state.history.empty: st.info("データなし")
     else:
-        st.header("1. スコア")
+        st.header("1. スコア推移")
         try:
             rep_qs = st.session_state.history.groupby(['チーム', 'Q'])['点数'].sum().unstack(fill_value=0).reindex(index=[home_name, away_name], columns=["1Q", "2Q", "3Q", "4Q", "OT"], fill_value=0)
             rep_qs['Total'] = rep_qs.sum(axis=1); st.table(rep_qs.astype(int))
         except: pass
 
-        st.header("2. 個人統計")
+        st.header("2. 個人スタッツ")
         def get_stats_df(t_name, p_list):
             df = st.session_state.history[st.session_state.history['チーム'] == t_name]
             rows = []
@@ -167,34 +156,29 @@ with tab_report:
                 p = pdf['点数'].sum()
 
                 tp+=p; tm2i+=m2i; tm2a+=m2a; tm3i+=m3i; tm3a+=m3a; tfi+=fi; tfa+=fa; tor+=orb; tdr+=drb; tast+=ast; tstl+=stl; tf+=f; ttv+=tv; tdd+=dd; tpm+=pm; ts24+=s24
-                
-                rows.append({
-                    '#': p_num, 'Pts': p, 
-                    'FG\n(M/A)': fmt_stat(m2i+m3i, m2a+m3a), 
-                    '3P\n(M/A)': fmt_stat(m3i, m3a), 
-                    'FT\n(M/A)': fmt_stat(fi, fa), 
-                    'REB\n(D/O)': f"{drb+orb}\n({drb}/{orb})", 
-                    'As': ast, 'St': stl, 'F': f, 
-                    'TO\n(T/D/P/2)': f"{tv+dd+pm+s24}\n({tv}/{dd}/{pm}/{s24})"
-                })
+                rows.append({'#': p_num, 'Pts': p, 'FG\n(M/A)': fmt_stat(m2i+m3i, m2a+m3a), '3P\n(M/A)': fmt_stat(m3i, m3a), 'FT\n(M/A)': fmt_stat(fi, fa), 
+                             'REB\n(D/O)': f"{drb+orb}\n({drb}/{orb})", 'As': ast, 'St': stl, 'F': f, 'TO\n(T/D/P/2)': f"{tv+dd+pm+s24}\n({tv}/{dd}/{pm}/{s24})", 'Team': t_name})
             
-            rows.append({
-                '#': 'Total', 'Pts': tp, 
-                'FG\n(M/A)': fmt_stat(tm2i+tm3i, tm2a+tm3a), 
-                '3P\n(M/A)': fmt_stat(tm3i, tm3a), 
-                'FT\n(M/A)': fmt_stat(tfi, tfa), 
-                'REB\n(D/O)': f"{tdr+tor}\n({tdr}/{tor})", 
-                'As': tast, 'St': tstl, 'F': tf, 
-                'TO\n(T/D/P/2)': f"{ttv+tdd+tpm+ts24}\n({ttv}/{tdd}/{tpm}/{ts24})"
-            })
+            rows.append({'#': 'Total', 'Pts': tp, 'FG\n(M/A)': fmt_stat(tm2i+tm3i, tm2a+tm3a), '3P\n(M/A)': fmt_stat(tm3i, tm3a), 'FT\n(M/A)': fmt_stat(tfi, tfa), 
+                         'REB\n(D/O)': f"{tdr+tor}\n({tdr}/{tor})", 'As': tast, 'St': tstl, 'F': tf, 'TO\n(T/D/P/2)': f"{ttv+tdd+tpm+ts24}\n({ttv}/{tdd}/{tpm}/{ts24})", 'Team': t_name})
             return pd.DataFrame(rows)
 
         h_stats = get_stats_df(home_name, home_players); a_stats = get_stats_df(away_name, away_players)
-        st.write(f"🔵 **{home_name}**"); st.table(h_stats.set_index('#'))
-        st.write(f"🔴 **{away_name}**"); st.table(a_stats.set_index('#'))
+        st.write(f"🔵 **{home_name}**"); st.table(h_stats.drop(columns='Team').set_index('#'))
+        st.write(f"🔴 **{away_name}**"); st.table(a_stats.drop(columns='Team').set_index('#'))
 
-        csv_stats = pd.concat([h_stats, a_stats], ignore_index=True).to_csv(index=False).encode('utf_8_sig')
+        # CSV保存：スタッツ
+        all_stats = pd.concat([h_stats, a_stats], ignore_index=True)
+        csv_stats = all_stats.to_csv(index=False).encode('utf_8_sig')
         st.download_button("📊 統計CSV保存", csv_stats, f"{tournament_name}_stats.csv", "text/csv")
+
+        st.divider()
+        st.header("3. 詳細ログ")
+        st.dataframe(st.session_state.history.iloc[::-1], use_container_width=True)
+        
+        # CSV保存：詳細ログ
+        csv_log = st.session_state.history.to_csv(index=False).encode('utf_8_sig')
+        st.download_button("📜 ログCSV保存", csv_log, f"{tournament_name}_log.csv", "text/csv")
 
 with tab_edit:
     st.header("🛠 修正")
