@@ -2,9 +2,9 @@ import streamlit as st
 import pandas as pd
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V07.0", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V07.1", layout="centered")
 
-# --- 0. CSS注入 (V06.1完全継承) ---
+# --- 0. CSS注入 (V06.1継承) ---
 st.markdown("""
     <style>
     .stTabs [data-baseweb="tab-list"] { gap: 10px; }
@@ -23,7 +23,6 @@ if 'mode' not in st.session_state: st.session_state.mode = "選手選択"
 if 'tmp' not in st.session_state: st.session_state.tmp = {}
 if 'current_q' not in st.session_state: st.session_state.current_q = "1Q"
 
-# チーム名と名簿の初期化（CSV復元時に上書きできるようにState管理）
 if 'h_name_in' not in st.session_state: st.session_state.h_name_in = "HOME"
 if 'a_name_in' not in st.session_state: st.session_state.a_name_in = "AWAY"
 if 'r_str_h' not in st.session_state: st.session_state.r_str_h = "4,5,6,7,8,9,10,11,12,13,14,15"
@@ -83,7 +82,7 @@ with st.sidebar:
     
     st.divider()
     
-    # ★新規：過去データ復元（CSV読み込み）機能
+    # ★修正：CSV読み込み ＆ 強力データクレンジング
     with st.expander("📂 過去データを復元・確認 (CSV読込)"):
         st.write("「詳細ログ」のCSVをアップロードすると、過去の試合レポートを確認・再開できます。")
         uploaded_file = st.file_uploader("詳細ログCSVを選択", type=["csv"], label_visibility="collapsed")
@@ -91,19 +90,28 @@ with st.sidebar:
             if st.button("データを復元する", type="primary", use_container_width=True):
                 try:
                     df = pd.read_csv(uploaded_file)
-                    # 必須列があるかチェック
                     if set(['id', 'Q', 'チーム', '名前', '項目', '詳細', '結果', '点数']).issubset(df.columns):
+                        
+                        # --- 🛠 ここが重要：型の強制変換と空白の削除 ---
+                        df['チーム'] = df['チーム'].astype(str).str.strip()
+                        df['名前'] = df['名前'].astype(str).str.strip()
+                        df['項目'] = df['項目'].astype(str).str.strip()
+                        df['詳細'] = df['詳細'].astype(str).str.strip()
+                        df['結果'] = df['結果'].astype(str).str.strip()
+                        # 点数を確実に「数値(整数)」にする（計算エラー防止）
+                        df['点数'] = pd.to_numeric(df['点数'], errors='coerce').fillna(0).astype(int)
+                        
                         st.session_state.history = df
                         
-                        # チーム名と選手名簿をCSVから逆算して自動復元
-                        teams = [t for t in df['チーム'].unique() if pd.notna(t) and str(t) != 'UNKNOWN']
+                        # チーム名の抽出
+                        teams = [t for t in df['チーム'].unique() if t and str(t).upper() != 'UNKNOWN']
                         if len(teams) > 0: st.session_state.h_name_in = teams[0]
                         if len(teams) > 1: st.session_state.a_name_in = teams[1]
                         
+                        # 選手名簿の抽出
                         def extract_players(team_name):
-                            p_list = df[df['チーム'] == team_name]['名前'].dropna().unique()
-                            # '番' を消して数字だけ抽出、'TEAM'は除外
-                            return [str(p).replace('番', '') for p in p_list if str(p) != 'TEAM']
+                            p_list = df[df['チーム'] == team_name]['名前'].unique()
+                            return [str(p).replace('番', '').strip() for p in p_list if str(p).upper() not in ['TEAM', 'NAN', 'NONE']]
                         
                         if len(teams) > 0:
                             h_p = extract_players(teams[0])
@@ -116,12 +124,12 @@ with st.sidebar:
                                 st.session_state.r_str_a = ",".join(a_p)
                                 st.session_state.act_a = a_p[:5]
                         
-                        st.toast("データを復元しました！")
+                        st.toast("✅ データを完全に復元しました！")
                         st.rerun()
                     else:
-                        st.error("対応していないCSV形式です（詳細ログCSVを選んでください）。")
+                        st.error("対応していないCSV形式です。詳細ログ(.csv)を選んでください。")
                 except Exception as e:
-                    st.error("読み込みに失敗しました。")
+                    st.error(f"読み込みエラー: {e}")
     
     st.divider()
     if st.button("全データリセット (新規試合)", type="secondary", use_container_width=True):
@@ -148,7 +156,6 @@ with tab_input:
         except: pass
     st.session_state.current_q = st.radio("Q", ["1Q", "2Q", "3Q", "4Q", "OT"], horizontal=True, label_visibility="collapsed")
 
-    # HOME：オンコートのみ
     st.write(f"🔵 **{home_name}**")
     if not active_h: st.warning("サイドバーで選手を選んでください")
     else:
@@ -203,11 +210,9 @@ with tab_input:
                 if r_3p_1[0].button("左角", use_container_width=True): st.session_state.tmp['area']="左角"; st.session_state.mode="結果選択"; st.rerun()
                 if r_3p_1[1].button("左45", use_container_width=True): st.session_state.tmp['area']="左45"; st.session_state.mode="結果選択"; st.rerun()
                 if r_3p_1[2].button("中", use_container_width=True): st.session_state.tmp['area']="中"; st.session_state.mode="結果選択"; st.rerun()
-                
                 r_3p_2 = st.columns(3)
                 if r_3p_2[0].button("右45", use_container_width=True): st.session_state.tmp['area']="右45"; st.session_state.mode="結果選択"; st.rerun()
                 if r_3p_2[1].button("右角", use_container_width=True): st.session_state.tmp['area']="右角"; st.session_state.mode="結果選択"; st.rerun()
-
             if st.button("戻る", use_container_width=True): st.session_state.mode="項目選択"; st.rerun()
             
         elif st.session_state.mode == "結果選択":
@@ -220,7 +225,6 @@ with tab_input:
                 record(item, detail=st.session_state.tmp.get('area','-'), res="成功", pts=pts)
                 if item in ["2P", "3P"]: st.session_state.mode = "アシスト選択"
                 st.rerun()
-                
             if sc[1].button("MISS", use_container_width=True): 
                 record(item, detail=st.session_state.tmp.get('area','-'), res="失敗", pts=0)
                 st.rerun()
@@ -248,7 +252,6 @@ with tab_input:
                 st.rerun()
 
     st.divider()
-    # AWAY：オンコートのみ
     if st.button(f"⏰ {away_name} TOUT", use_container_width=True): record("TOUT", team=away_name, name="TEAM")
     st.write(f"🔴 **{away_name}**")
     if not active_a: st.warning("サイドバーで選手を選んでください")
@@ -284,6 +287,7 @@ with tab_report:
                 to = pdf[pdf['項目']=='TO']; tv, dd, pm, s24 = len(to[to['詳細']=='TV']), len(to[to['詳細']=='DD']), len(to[to['詳細']=='PM']), len(to[to['詳細']=='24S'])
                 p = pdf['点数'].sum()
                 tp+=p; tm2i+=m2i; tm2a+=m2a; tm3i+=m3i; tm3a+=m3a; tfi+=fi; tfa+=fa; tor+=orb; tdr+=drb; tast+=ast; tstl+=stl; tf+=f; ttv+=tv; tdd+=dd; tpm+=pm; ts24+=s24
+                # 記録が全くない選手も、名簿(p_list_all)にいれば0で表示します
                 rows.append({'#': p_num, 'Pts': p, 'FG\n(M/A)': fmt_stat(m2i+m3i, m2a+m3a), '3P\n(M/A)': fmt_stat(m3i, m3a), 'FT\n(M/A)': fmt_stat(fi, fa), 
                              'REB\n(D/O)': f"{drb+orb}\n({drb}/{orb})", 'As': ast, 'St': stl, 'F': f, 'TO\n(T/D/P/2)': f"{tv+dd+pm+s24}\n({tv}/{dd}/{pm}/{s24})", 'Team': t_name})
             rows.append({'#': 'Total', 'Pts': tp, 'FG\n(M/A)': fmt_stat(tm2i+tm3i, tm2a+tm3a), '3P\n(M/A)': fmt_stat(tm3i, tm3a), 'FT\n(M/A)': fmt_stat(tfi, tfa), 
