@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V02.5", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V02.6", layout="centered")
 
 # --- 1. データ初期化 ---
 if 'history' not in st.session_state:
@@ -122,20 +122,23 @@ with tab_report:
             rep_qs['Total'] = rep_qs.sum(axis=1); st.table(rep_qs.astype(int))
         except: pass
 
-        # --- 2. 個人スタッツ (V02.5：REB統一 & 合計行) ---
+        # --- 2. 個人スタッツ (V02.6：M/A(%) 統合版) ---
         st.header("2. 個人スタッツ")
         def build_box(t_name, p_list_source):
             df = st.session_state.history[st.session_state.history['チーム'] == t_name]
             rows = []
             
-            # チーム合計用カウンタ
+            # チーム合計用
             t_pts, t_m2i, t_m2a, t_m3i, t_m3a, t_fti, t_fta = 0,0,0,0,0,0,0
-            t_orb, t_drb, t_ast, t_stl, t_foul = 0,0,0,0,0
+            t_orb, t_drb, t_ast, t_stl, t_foul, t_to = 0,0,0,0,0,0
             t_tv, t_dd, t_pm, t_s24 = 0,0,0,0
             
+            def fmt_stat(m, a):
+                pct = f"({(m/a*100):.0f}%)" if a > 0 else "(0%)"
+                return f"{m}/{a} {pct}"
+
             for p_num in p_list_source:
                 p_name = f"{p_num}番"; pdf = df[df['名前'] == p_name]
-                # データ抽出
                 m2i, m2a = len(pdf[(pdf['項目']=='2P') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='2P'])
                 m3i, m3a = len(pdf[(pdf['項目']=='3P') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='3P'])
                 fti, fta = len(pdf[(pdf['項目']=='FT') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='FT'])
@@ -145,29 +148,25 @@ with tab_report:
                 tv, dd, pm, s24 = len(to_pdf[to_pdf['詳細']=='TV']), len(to_pdf[to_pdf['詳細']=='DD']), len(to_pdf[to_pdf['詳細']=='PM']), len(to_pdf[to_pdf['詳細']=='24S'])
                 pts = pdf['点数'].sum()
 
-                # チーム合計加算
                 t_pts+=pts; t_m2i+=m2i; t_m2a+=m2a; t_m3i+=m3i; t_m3a+=m3a; t_fti+=fti; t_fta+=fta
-                t_orb+=orb; t_drb+=drb; t_ast+=ast; t_stl+=stl; t_foul+=foul
-                t_tv+=tv; t_dd+=dd; t_pm+=pm; t_s24+=s24
+                t_orb+=orb; t_drb+=drb; t_ast+=ast; t_stl+=stl; t_foul+=foul; t_tv+=tv; t_dd+=dd; t_pm+=pm; t_s24+=s24
 
                 rows.append({
                     '#': p_num, 'Pts': pts,
-                    'FG(M/A)': f"{m2i+m3i}/{m2a+m3a}",
-                    '3P(M/A)': f"{m3i}/{m3a}",
-                    'FT(M/A)': f"{fti}/{fta}",
+                    'FG(M/A/%)': fmt_stat(m2i+m3i, m2a+m3a),
+                    '3P(M/A/%)': fmt_stat(m3i, m3a),
+                    'FT(M/A/%)': fmt_stat(fti, fta),
                     'REB(O/D)': f"{orb+drb} ({orb}/{drb})",
                     'As': ast, 'St': stl, 'F': foul,
                     'TO(T/D/P/2S)': f"{tv+dd+pm+s24} ({tv}/{dd}/{pm}/{s24})"
                 })
             
-            # TOTAL行の作成
-            t_m_total = t_m2i + t_m3i
-            t_a_total = t_m2a + t_m3a
+            # TOTAL行
             rows.append({
                 '#': 'TOTAL', 'Pts': t_pts,
-                'FG(M/A)': f"{t_m_total}/{t_a_total}",
-                '3P(M/A)': f"{t_m3i}/{t_m3a}",
-                'FT(M/A)': f"{t_fti}/{t_fta}",
+                'FG(M/A/%)': fmt_stat(t_m2i+t_m3i, t_m2a+t_m3a),
+                '3P(M/A/%)': fmt_stat(t_m3i, t_m3a),
+                'FT(M/A/%)': fmt_stat(t_fti, t_fta),
                 'REB(O/D)': f"{t_orb+t_drb} ({t_orb}/{t_drb})",
                 'As': t_ast, 'St': t_stl, 'F': t_foul,
                 'TO(T/D/P/2S)': f"{t_tv+t_dd+t_pm+t_s24} ({t_tv}/{t_dd}/{t_pm}/{t_s24})"
