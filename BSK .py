@@ -7,7 +7,7 @@ import json
 import altair as alt
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V11.1", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V11.2", layout="centered")
 
 # --- 0. CSS注入 ---
 st.markdown("""
@@ -50,13 +50,48 @@ def safe_sort_key(x):
         except: return (1, 0, str(x))
     return (1, 0, str(x))
 
+# --- ★新規：各種コールバック関数（エラー回避用） ---
 def reset_all_data():
     if os.path.exists("auto_save_log.csv"): os.remove("auto_save_log.csv")
     if os.path.exists("auto_save_settings.json"): os.remove("auto_save_settings.json")
     keys_to_clear = ['history', 'tournament_name', 'home_name', 'away_name', 'r_str_h', 'r_str_a', 'act_h', 'act_a', 'current_q', 'mode', 'tmp']
     for k in keys_to_clear:
-        if k in st.session_state:
-            del st.session_state[k]
+        if k in st.session_state: del st.session_state[k]
+
+def swap_teams():
+    # チーム名・名簿・オンコートを安全に入れ替える
+    st.session_state.home_name, st.session_state.away_name = st.session_state.away_name, st.session_state.home_name
+    st.session_state.r_str_h, st.session_state.r_str_a = st.session_state.r_str_a, st.session_state.r_str_h
+    st.session_state.act_h, st.session_state.act_a = st.session_state.act_a, st.session_state.act_h
+    save_state()
+
+def add_h_player():
+    new_h = st.session_state.get('new_h_input', '')
+    if new_h:
+        new_nums = [x.strip() for x in new_h.split(",") if x.strip()]
+        all_h_list = [x.strip() for x in st.session_state.r_str_h.split(",") if x.strip()]
+        curr_act_h = st.session_state.act_h
+        for n in new_nums:
+            if n not in all_h_list: all_h_list.append(n)
+            if n not in curr_act_h: curr_act_h.append(n)
+        st.session_state.r_str_h = ",".join(sorted(all_h_list, key=safe_sort_key))
+        st.session_state.act_h = curr_act_h
+        st.session_state.new_h_input = ""  # 入力欄をクリア
+        save_state()
+
+def add_a_player():
+    new_a = st.session_state.get('new_a_input', '')
+    if new_a:
+        new_nums = [x.strip() for x in new_a.split(",") if x.strip()]
+        all_a_list = [x.strip() for x in st.session_state.r_str_a.split(",") if x.strip()]
+        curr_act_a = st.session_state.act_a
+        for n in new_nums:
+            if n not in all_a_list: all_a_list.append(n)
+            if n not in curr_act_a: curr_act_a.append(n)
+        st.session_state.r_str_a = ",".join(sorted(all_a_list, key=safe_sort_key))
+        st.session_state.act_a = curr_act_a
+        st.session_state.new_a_input = ""  # 入力欄をクリア
+        save_state()
 
 # --- 1. 初期化＆セーフティネット ---
 if 'app_init' not in st.session_state:
@@ -152,18 +187,8 @@ with st.sidebar:
     
     # === HOME ===
     st.text_input("自チーム名", key="home_name")
-    new_h = st.text_input(f"🔵 新規選手を追加", placeholder="例: 13。")
-    if st.button("＋追加＆出場", key="add_h", use_container_width=True):
-        if new_h:
-            new_nums = [x.strip() for x in new_h.split(",") if x.strip()]
-            all_h_list = [x.strip() for x in st.session_state.r_str_h.split(",") if x.strip()]
-            curr_act_h = st.session_state.act_h
-            for n in new_nums:
-                if n not in all_h_list: all_h_list.append(n)
-                if n not in curr_act_h: curr_act_h.append(n)
-            st.session_state.r_str_h = ",".join(sorted(all_h_list, key=safe_sort_key))
-            st.session_state.act_h = curr_act_h
-            safe_rerun()
+    st.text_input(f"🔵 新規選手を追加", placeholder="例: 13。", key="new_h_input")
+    st.button("＋追加＆出場", key="add_h", use_container_width=True, on_click=add_h_player)
 
     with st.expander(f"👥 {st.session_state.home_name} 名簿を手動編集"):
         st.text_area("全背番号 (カンマ区切り)", key="r_str_h")
@@ -173,30 +198,15 @@ with st.sidebar:
     if st.session_state.act_h != valid_act_h: st.session_state.act_h = valid_act_h
     st.multiselect(f"🔵 {st.session_state.home_name} オンコート", options=all_h, key="act_h")
     
-    # ★追加：チーム入れ替えボタン
+    # ★修正：入れ替えボタンをコールバック化
     st.divider()
-    if st.button("🔁 HOMEとAWAYを入れ替える", use_container_width=True):
-        # チーム名、名簿、オンコートをすべてスワップ！
-        st.session_state.home_name, st.session_state.away_name = st.session_state.away_name, st.session_state.home_name
-        st.session_state.r_str_h, st.session_state.r_str_a = st.session_state.r_str_a, st.session_state.r_str_h
-        st.session_state.act_h, st.session_state.act_a = st.session_state.act_a, st.session_state.act_h
-        safe_rerun()
+    st.button("🔁 HOMEとAWAYを入れ替える", use_container_width=True, on_click=swap_teams)
     st.divider()
     
     # === AWAY ===
     st.text_input("相手チーム名", key="away_name")
-    new_a = st.text_input(f"🔴 新規選手を追加", placeholder="例: ⑨")
-    if st.button("＋追加＆出場", key="add_a", use_container_width=True):
-        if new_a:
-            new_nums = [x.strip() for x in new_a.split(",") if x.strip()]
-            all_a_list = [x.strip() for x in st.session_state.r_str_a.split(",") if x.strip()]
-            curr_act_a = st.session_state.act_a
-            for n in new_nums:
-                if n not in all_a_list: all_a_list.append(n)
-                if n not in curr_act_a: curr_act_a.append(n)
-            st.session_state.r_str_a = ",".join(sorted(all_a_list, key=safe_sort_key))
-            st.session_state.act_a = curr_act_a
-            safe_rerun()
+    st.text_input(f"🔴 新規選手を追加", placeholder="例: ⑨", key="new_a_input")
+    st.button("＋追加＆出場", key="add_a", use_container_width=True, on_click=add_a_player)
 
     with st.expander(f"👥 {st.session_state.away_name} 名簿を手動編集"):
         st.text_area("全背番号 (カンマ区切り)", key="r_str_a")
