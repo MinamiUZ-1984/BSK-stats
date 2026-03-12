@@ -7,7 +7,7 @@ import json
 import altair as alt
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V10.0", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V11.0", layout="centered")
 
 # --- 0. CSS注入 ---
 st.markdown("""
@@ -325,8 +325,8 @@ with tab_input:
             if cols_a[i].button(p_num, key=f"a_{p_num}", use_container_width=True):
                 st.session_state.tmp = {'player': p_num, 'team': st.session_state.away_name}; st.session_state.mode = "項目選択"; safe_rerun()
 
-# --- グラフ描画用関数 ---
-def draw_fixed_scale_chart(df, x_col, max_y):
+# --- ★グラフ描画用関数 ---
+def draw_stacked_chart(df, x_col, max_y):
     if df.empty: return
     df_m = df.reset_index().melt(id_vars=x_col, var_name='結果', value_name='回数')
     chart = alt.Chart(df_m).mark_bar().encode(
@@ -335,6 +335,21 @@ def draw_fixed_scale_chart(df, x_col, max_y):
         color=alt.Color('結果:N', scale=alt.Scale(domain=['成功', '失敗'], range=['#00b050', '#ff4b4b']), legend=alt.Legend(title="", orient="bottom")),
         tooltip=[f"{x_col}:N", '結果:N', '回数:Q']
     ).properties(height=250)
+    st.altair_chart(chart, use_container_width=True)
+
+def draw_simple_bar_chart(s, x_name, max_y, sort_order, color_range=None):
+    if s.empty: return
+    df = s.to_frame(name='回数').reset_index()
+    df.columns = [x_name, '回数']
+    color_encode = alt.Color(f'{x_name}:N', legend=None)
+    if color_range:
+        color_encode = alt.Color(f'{x_name}:N', scale=alt.Scale(domain=sort_order, range=color_range), legend=None)
+    chart = alt.Chart(df).mark_bar().encode(
+        x=alt.X(f"{x_name}:N", sort=sort_order, title='', axis=alt.Axis(labelAngle=0, labelOverlap=False)),
+        y=alt.Y('回数:Q', scale=alt.Scale(domain=[0, max_y]), title=''),
+        color=color_encode,
+        tooltip=[f"{x_name}:N", '回数:Q']
+    ).properties(height=200)
     st.altair_chart(chart, use_container_width=True)
 
 # --- 【タブ2】レポート ---
@@ -347,45 +362,37 @@ with tab_report:
             rep_qs['Total'] = rep_qs.sum(axis=1); st.table(rep_qs.astype(int))
         except: pass
 
-        st.header("2. シュート分析グラフ")
+        # ★修正：タイトルを「分析グラフ」に変更
+        st.header("2. 分析グラフ")
         
-        # ★追加：グラフ表示用の「Q（期間）」フィルター
         st.write("▼ グラフ表示の対象期間")
         selected_q_graph = st.radio("グラフ対象期間", ["Total", "1Q", "2Q", "3Q", "4Q", "OT"], horizontal=True, label_visibility="collapsed")
         
-        # 選択されたQに基づいてデータをフィルタリング
-        if selected_q_graph == "Total":
-            filtered_history = st.session_state.history
-        else:
-            filtered_history = st.session_state.history[st.session_state.history['Q'] == selected_q_graph]
+        if selected_q_graph == "Total": filtered_history = st.session_state.history
+        else: filtered_history = st.session_state.history[st.session_state.history['Q'] == selected_q_graph]
 
         st.subheader(f"① 全体シュート ({selected_q_graph})")
         shots_df = filtered_history[filtered_history['項目'].isin(['2P', '3P', 'FT'])]
         if not shots_df.empty:
-            st.markdown("<span style='font-size:11px;'>※ 全体の高さ＝「試行回数」、緑色が「成功」、赤色が「失敗」を表します。<br>※ 左右のグラフの高さ(縦軸)は比較しやすいよう同じ値に固定されています。</span>", unsafe_allow_html=True)
+            st.markdown("<span style='font-size:11px;'>全体の高さ＝「試行回数」、緑色が「成功」、赤色が「失敗」</span>", unsafe_allow_html=True)
             s_stats = shots_df.groupby(['チーム', '項目', '結果']).size().unstack(fill_value=0)
             if '成功' not in s_stats.columns: s_stats['成功'] = 0
             if '失敗' not in s_stats.columns: s_stats['失敗'] = 0
             s_stats = s_stats[['成功', '失敗']]
-            
-            max_y_overall = int(s_stats.sum(axis=1).max())
-            max_y_overall = max_y_overall + 1 if max_y_overall > 0 else 5
+            max_y_overall = int(s_stats.sum(axis=1).max()); max_y_overall = max_y_overall + 1 if max_y_overall > 0 else 5
             
             g1, g2 = st.columns(2)
             with g1:
                 st.write(f"🔵 **{st.session_state.home_name}**")
                 if st.session_state.home_name in s_stats.index.get_level_values('チーム'):
-                    df_h = s_stats.xs(st.session_state.home_name, level='チーム').reindex(['2P', '3P', 'FT'], fill_value=0)
-                    draw_fixed_scale_chart(df_h, '項目', max_y_overall)
+                    draw_stacked_chart(s_stats.xs(st.session_state.home_name, level='チーム').reindex(['2P', '3P', 'FT'], fill_value=0), '項目', max_y_overall)
                 else: st.caption("データなし")
             with g2:
                 st.write(f"🔴 **{st.session_state.away_name}**")
                 if st.session_state.away_name in s_stats.index.get_level_values('チーム'):
-                    df_a = s_stats.xs(st.session_state.away_name, level='チーム').reindex(['2P', '3P', 'FT'], fill_value=0)
-                    draw_fixed_scale_chart(df_a, '項目', max_y_overall)
+                    draw_stacked_chart(s_stats.xs(st.session_state.away_name, level='チーム').reindex(['2P', '3P', 'FT'], fill_value=0), '項目', max_y_overall)
                 else: st.caption("データなし")
-        else:
-            st.info(f"{selected_q_graph} のシュート記録がありません")
+        else: st.info(f"{selected_q_graph} のシュート記録がありません")
 
         st.subheader(f"② エリア別シュート分布 ({selected_q_graph})")
         area_target = st.radio("表示項目", ["2P", "3P"], horizontal=True, label_visibility="collapsed")
@@ -395,30 +402,70 @@ with tab_report:
             if '成功' not in a_stats.columns: a_stats['成功'] = 0
             if '失敗' not in a_stats.columns: a_stats['失敗'] = 0
             a_stats = a_stats[['成功', '失敗']]
-            
-            max_y_area = int(a_stats.sum(axis=1).max())
-            max_y_area = max_y_area + 1 if max_y_area > 0 else 5
-            
-            if area_target == "2P":
-                areas_order = ["左下", "中下", "右下", "左レ", "中レ", "右レ", "左角", "左45", "中", "右45", "右角"]
-            else:
-                areas_order = ["左角", "左45", "中", "右45", "右角"]
+            max_y_area = int(a_stats.sum(axis=1).max()); max_y_area = max_y_area + 1 if max_y_area > 0 else 5
+            areas_order = ["左下", "中下", "右下", "左レ", "中レ", "右レ", "左角", "左45", "中", "右45", "右角"] if area_target == "2P" else ["左角", "左45", "中", "右45", "右角"]
             
             ga1, ga2 = st.columns(2)
             with ga1:
                 st.write(f"🔵 **{st.session_state.home_name}**")
                 if st.session_state.home_name in a_stats.index.get_level_values('チーム'):
-                    df_ah = a_stats.xs(st.session_state.home_name, level='チーム').reindex(areas_order, fill_value=0)
-                    draw_fixed_scale_chart(df_ah, '詳細', max_y_area)
+                    draw_stacked_chart(a_stats.xs(st.session_state.home_name, level='チーム').reindex(areas_order, fill_value=0), '詳細', max_y_area)
                 else: st.caption("データなし")
             with ga2:
                 st.write(f"🔴 **{st.session_state.away_name}**")
                 if st.session_state.away_name in a_stats.index.get_level_values('チーム'):
-                    df_aa = a_stats.xs(st.session_state.away_name, level='チーム').reindex(areas_order, fill_value=0)
-                    draw_fixed_scale_chart(df_aa, '詳細', max_y_area)
+                    draw_stacked_chart(a_stats.xs(st.session_state.away_name, level='チーム').reindex(areas_order, fill_value=0), '詳細', max_y_area)
                 else: st.caption("データなし")
-        else:
-            st.info(f"{selected_q_graph} の {area_target}シュート記録がありません")
+        else: st.info(f"{selected_q_graph} の {area_target}シュート記録がありません")
+
+        # ★追加：リバウンド（OR/DR）グラフ
+        st.subheader(f"③ リバウンド ({selected_q_graph})")
+        reb_df = filtered_history[filtered_history['項目'].isin(['OR', 'DR'])]
+        if not reb_df.empty:
+            r_stats = reb_df.groupby(['チーム', '項目']).size().unstack(fill_value=0)
+            if 'OR' not in r_stats.columns: r_stats['OR'] = 0
+            if 'DR' not in r_stats.columns: r_stats['DR'] = 0
+            r_stats = r_stats[['OR', 'DR']]
+            max_y_reb = int(r_stats.max().max()); max_y_reb = max_y_reb + 1 if max_y_reb > 0 else 5
+            
+            gr1, gr2 = st.columns(2)
+            with gr1:
+                st.write(f"🔵 **{st.session_state.home_name}**")
+                if st.session_state.home_name in r_stats.index:
+                    # ORはオレンジ、DRは青で表示
+                    draw_simple_bar_chart(r_stats.loc[st.session_state.home_name], '種類', max_y_reb, ['OR', 'DR'], ['#ff9f43', '#3498db'])
+                else: st.caption("データなし")
+            with gr2:
+                st.write(f"🔴 **{st.session_state.away_name}**")
+                if st.session_state.away_name in r_stats.index:
+                    draw_simple_bar_chart(r_stats.loc[st.session_state.away_name], '種類', max_y_reb, ['OR', 'DR'], ['#ff9f43', '#3498db'])
+                else: st.caption("データなし")
+        else: st.info(f"{selected_q_graph} のリバウンド記録がありません")
+
+        # ★追加：ターンオーバー内訳グラフ
+        st.subheader(f"④ ターンオーバー ({selected_q_graph})")
+        to_df = filtered_history[filtered_history['項目'] == 'TO']
+        if not to_df.empty:
+            to_stats = to_df.groupby(['チーム', '詳細']).size().unstack(fill_value=0)
+            to_cols = ['TV', 'DD', 'PM', '24S']
+            for col in to_cols:
+                if col not in to_stats.columns: to_stats[col] = 0
+            to_stats = to_stats[to_cols]
+            max_y_to = int(to_stats.max().max()); max_y_to = max_y_to + 1 if max_y_to > 0 else 5
+            
+            gt1, gt2 = st.columns(2)
+            with gt1:
+                st.write(f"🔵 **{st.session_state.home_name}**")
+                if st.session_state.home_name in to_stats.index:
+                    # ミスなので少し暗めの統一色（グレー）で表示
+                    draw_simple_bar_chart(to_stats.loc[st.session_state.home_name], '詳細', max_y_to, to_cols, ['#95a5a6', '#95a5a6', '#95a5a6', '#95a5a6'])
+                else: st.caption("データなし")
+            with gt2:
+                st.write(f"🔴 **{st.session_state.away_name}**")
+                if st.session_state.away_name in to_stats.index:
+                    draw_simple_bar_chart(to_stats.loc[st.session_state.away_name], '詳細', max_y_to, to_cols, ['#95a5a6', '#95a5a6', '#95a5a6', '#95a5a6'])
+                else: st.caption("データなし")
+        else: st.info(f"{selected_q_graph} のターンオーバー記録がありません")
 
         st.header("3. 個人スタッツ")
         def get_stats_df(t_name, p_list_all):
