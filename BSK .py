@@ -7,7 +7,7 @@ import json
 import altair as alt
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V09.2", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V09.3", layout="centered")
 
 # --- 0. CSS注入 ---
 st.markdown("""
@@ -325,15 +325,13 @@ with tab_input:
             if cols_a[i].button(p_num, key=f"a_{p_num}", use_container_width=True):
                 st.session_state.tmp = {'player': p_num, 'team': st.session_state.away_name}; st.session_state.mode = "項目選択"; safe_rerun()
 
-# --- ★グラフ描画用共通関数 (Altairを使用してスケール固定＆装飾) ---
+# --- ★グラフ描画用共通関数 (ラベル間引きの無効化を追加！) ---
 def draw_fixed_scale_chart(df, x_col, max_y):
-    # データがない場合は空枠で返す
     if df.empty: return
-    # データをAltair用に変換
     df_m = df.reset_index().melt(id_vars=x_col, var_name='結果', value_name='回数')
     chart = alt.Chart(df_m).mark_bar().encode(
-        x=alt.X(f"{x_col}:N", sort=None, title='', axis=alt.Axis(labelAngle=-45)),
-        # Y軸の最大値を「max_y」に固定する！
+        # ★ labelOverlap=False を追加してすべての項目名を表示させる！
+        x=alt.X(f"{x_col}:N", sort=None, title='', axis=alt.Axis(labelAngle=-45, labelOverlap=False)),
         y=alt.Y('回数:Q', scale=alt.Scale(domain=[0, max_y]), title=''),
         color=alt.Color('結果:N', scale=alt.Scale(domain=['成功', '失敗'], range=['#00b050', '#ff4b4b']), legend=alt.Legend(title="", orient="bottom")),
         tooltip=[f"{x_col}:N", '結果:N', '回数:Q']
@@ -359,7 +357,6 @@ with tab_report:
             if '失敗' not in s_stats.columns: s_stats['失敗'] = 0
             s_stats = s_stats[['成功', '失敗']]
             
-            # --- ★両チームでの最大試行回数を計算し、少し余裕(+1)を持たせる ---
             max_y_overall = int(s_stats.sum(axis=1).max())
             max_y_overall = max_y_overall + 1 if max_y_overall > 0 else 5
             
@@ -388,7 +385,6 @@ with tab_report:
             if '失敗' not in a_stats.columns: a_stats['失敗'] = 0
             a_stats = a_stats[['成功', '失敗']]
             
-            # --- ★両チームでの最大試行回数(エリア別)を計算 ---
             max_y_area = int(a_stats.sum(axis=1).max())
             max_y_area = max_y_area + 1 if max_y_area > 0 else 5
             
