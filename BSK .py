@@ -7,7 +7,7 @@ import json
 import altair as alt
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V12.1", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V13.0", layout="centered")
 
 # --- 0. CSS注入 ---
 st.markdown("""
@@ -22,8 +22,9 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- オートセーブ機能 ---
+# --- ★軽量化1：オートセーブ機能のスマート化 ---
 def save_state():
+    # 実際にデータが保存される処理
     if 'history' in st.session_state:
         st.session_state.history.to_csv("auto_save_log.csv", index=False, encoding='utf_8_sig')
     settings = {
@@ -40,7 +41,8 @@ def save_state():
         json.dump(settings, f, ensure_ascii=False)
 
 def safe_rerun():
-    save_state()
+    # ★軽量化2：入力アクションが起きたら、レポートの重い計算フラグを強制OFFにして軽くする！
+    st.session_state.report_trigger = False
     st.rerun()
 
 def safe_sort_key(x):
@@ -54,7 +56,7 @@ def safe_sort_key(x):
 def reset_all_data():
     if os.path.exists("auto_save_log.csv"): os.remove("auto_save_log.csv")
     if os.path.exists("auto_save_settings.json"): os.remove("auto_save_settings.json")
-    keys_to_clear = ['history', 'tournament_name', 'home_name', 'away_name', 'r_str_h', 'r_str_a', 'act_h', 'act_a', 'current_q', 'mode', 'tmp']
+    keys_to_clear = ['history', 'tournament_name', 'home_name', 'away_name', 'r_str_h', 'r_str_a', 'act_h', 'act_a', 'current_q', 'mode', 'tmp', 'report_trigger']
     for k in keys_to_clear:
         if k in st.session_state: del st.session_state[k]
 
@@ -62,7 +64,6 @@ def swap_teams():
     st.session_state.home_name, st.session_state.away_name = st.session_state.away_name, st.session_state.home_name
     st.session_state.r_str_h, st.session_state.r_str_a = st.session_state.r_str_a, st.session_state.r_str_h
     st.session_state.act_h, st.session_state.act_a = st.session_state.act_a, st.session_state.act_h
-    save_state()
 
 def add_h_player():
     new_h = st.session_state.get('new_h_input', '')
@@ -76,7 +77,6 @@ def add_h_player():
         st.session_state.r_str_h = ",".join(sorted(all_h_list, key=safe_sort_key))
         st.session_state.act_h = curr_act_h
         st.session_state.new_h_input = ""
-        save_state()
 
 def add_a_player():
     new_a = st.session_state.get('new_a_input', '')
@@ -90,7 +90,6 @@ def add_a_player():
         st.session_state.r_str_a = ",".join(sorted(all_a_list, key=safe_sort_key))
         st.session_state.act_a = curr_act_a
         st.session_state.new_a_input = ""
-        save_state()
 
 # --- 1. 初期化＆セーフティネット ---
 if 'app_init' not in st.session_state:
@@ -122,6 +121,7 @@ if 'act_a' not in st.session_state: st.session_state.act_a = ["4","5","6","7","8
 if 'current_q' not in st.session_state: st.session_state.current_q = "1Q"
 if 'mode' not in st.session_state: st.session_state.mode = "選手選択"
 if 'tmp' not in st.session_state: st.session_state.tmp = {}
+if 'report_trigger' not in st.session_state: st.session_state.report_trigger = False
 
 # --- CSV読み込み ---
 def load_csv_data():
@@ -167,7 +167,6 @@ def load_csv_data():
                     st.session_state.r_str_a = ",".join(a_p)
                     st.session_state.act_a = a_p[:5]
                 st.toast("✅ データを完全に復元しました！")
-                save_state()
             else: st.error("対応していないCSV形式です。")
         except Exception as e: st.error(f"読み込みエラー: {e}")
 
@@ -217,7 +216,6 @@ def record(item, detail="-", res="成功", pts=0, team=None, name=None):
     new_row = pd.DataFrame([{'id': new_id, 'Q': st.session_state.current_q, 'チーム': t_name, '名前': p_name, '項目': item, '詳細': detail, '結果': res, '点数': pts}])
     st.session_state.history = pd.concat([st.session_state.history, new_row], ignore_index=True)
     st.session_state.mode = "選手選択"; st.toast(f"記録完了")
-    save_state()
 
 # --- 4. メイン画面 ---
 tab_input, tab_report, tab_edit = st.tabs(["✍️ 記録入力", "📄 統計レポート", "🛠 修正"])
@@ -228,7 +226,9 @@ with tab_input:
             qs = st.session_state.history.groupby(['チーム', 'Q'])['点数'].sum().unstack(fill_value=0).reindex(index=[st.session_state.home_name, st.session_state.away_name], columns=["1Q", "2Q", "3Q", "4Q", "OT"], fill_value=0)
             qs['Total'] = qs.sum(axis=1); st.table(qs.astype(int))
         except: pass
-    st.radio("Q", ["1Q", "2Q", "3Q", "4Q", "OT"], horizontal=True, label_visibility="collapsed", key="current_q")
+    
+    # Qを切り替えた時もレポートフラグをリセットして軽くする
+    st.radio("Q", ["1Q", "2Q", "3Q", "4Q", "OT"], horizontal=True, label_visibility="collapsed", key="current_q", on_change=safe_rerun)
 
     st.write(f"🔵 **{st.session_state.home_name}**")
     if not st.session_state.act_h: st.warning("サイドバーで選手を選んでください")
@@ -309,7 +309,6 @@ with tab_input:
             
             active_list = st.session_state.act_h if t_name == st.session_state.home_name else st.session_state.act_a
             assist_candidates = [p for p in active_list if p != scorer]
-            
             if assist_candidates:
                 ast_c = st.columns(len(assist_candidates))
                 for i, p_num in enumerate(assist_candidates):
@@ -360,169 +359,177 @@ def draw_simple_bar_chart(s, x_name, max_y, sort_order, color_range=None):
 
 # --- 【タブ2】レポート ---
 with tab_report:
-    if st.session_state.history.empty: st.info("データなし")
+    if st.session_state.history.empty: 
+        st.info("データなし")
     else:
-        st.header("1. スコア推移")
-        try:
-            rep_qs = st.session_state.history.groupby(['チーム', 'Q'])['点数'].sum().unstack(fill_value=0).reindex(index=[st.session_state.home_name, st.session_state.away_name], columns=["1Q", "2Q", "3Q", "4Q", "OT"], fill_value=0)
-            rep_qs['Total'] = rep_qs.sum(axis=1); st.table(rep_qs.astype(int))
-        except: pass
-
-        st.header("2. 分析グラフ")
-        st.write("▼ グラフ表示の対象期間")
-        selected_q_graph = st.radio("グラフ対象期間", ["Total", "1Q", "2Q", "3Q", "4Q", "OT"], horizontal=True, label_visibility="collapsed")
+        # ★軽量化3：ボタンが押されるまでは重いグラフ計算をサボる！
+        if not st.session_state.report_trigger:
+            st.info("⚡ 試合中の入力スピードを最優先するため、グラフとスタッツは非表示になっています。")
+            if st.button("📊 最新のデータでレポートを計算・表示する", use_container_width=True, type="primary"):
+                st.session_state.report_trigger = True
+                st.rerun()
         
-        if selected_q_graph == "Total": filtered_history = st.session_state.history
-        else: filtered_history = st.session_state.history[st.session_state.history['Q'] == selected_q_graph]
+        # グラフ計算フラグがONの時だけ全処理を実行
+        if st.session_state.report_trigger:
+            st.header("1. スコア推移")
+            try:
+                rep_qs = st.session_state.history.groupby(['チーム', 'Q'])['点数'].sum().unstack(fill_value=0).reindex(index=[st.session_state.home_name, st.session_state.away_name], columns=["1Q", "2Q", "3Q", "4Q", "OT"], fill_value=0)
+                rep_qs['Total'] = rep_qs.sum(axis=1); st.table(rep_qs.astype(int))
+            except: pass
 
-        # ★修正：selectboxからradio(horizontal=True)に変更し、キーボード出現を完全阻止！
-        st.write("▼ グラフ表示の対象選手")
-        h_players = ["全体"] + sorted([p.replace('番','') for p in filtered_history[filtered_history['チーム']==st.session_state.home_name]['名前'].unique() if p != 'TEAM'], key=safe_sort_key)
-        sel_h = st.radio(f"🔵 {st.session_state.home_name} 選手選択", h_players, horizontal=True, label_visibility="collapsed")
-        
-        a_players = ["全体"] + sorted([p.replace('番','') for p in filtered_history[filtered_history['チーム']==st.session_state.away_name]['名前'].unique() if p != 'TEAM'], key=safe_sort_key)
-        sel_a = st.radio(f"🔴 {st.session_state.away_name} 選手選択", a_players, horizontal=True, label_visibility="collapsed")
-
-        # 選択された選手でデータを絞り込む
-        df_h_graph = filtered_history[filtered_history['チーム'] == st.session_state.home_name]
-        if sel_h != "全体": df_h_graph = df_h_graph[df_h_graph['名前'] == f"{sel_h}番"]
+            st.header("2. 分析グラフ")
+            st.write("▼ グラフ表示の対象期間")
+            selected_q_graph = st.radio("グラフ対象期間", ["Total", "1Q", "2Q", "3Q", "4Q", "OT"], horizontal=True, label_visibility="collapsed")
             
-        df_a_graph = filtered_history[filtered_history['チーム'] == st.session_state.away_name]
-        if sel_a != "全体": df_a_graph = df_a_graph[df_a_graph['名前'] == f"{sel_a}番"]
+            if selected_q_graph == "Total": filtered_history = st.session_state.history
+            else: filtered_history = st.session_state.history[st.session_state.history['Q'] == selected_q_graph]
 
-        st.subheader(f"① 全体シュート ({selected_q_graph})")
-        def get_shot_stats(df):
-            sh = df[df['項目'].isin(['2P', '3P', 'FT'])]
-            if sh.empty: return pd.DataFrame(columns=['成功', '失敗'], index=['2P', '3P', 'FT']).fillna(0)
-            stats = sh.groupby(['項目', '結果']).size().unstack(fill_value=0)
-            for c in ['成功', '失敗']:
-                if c not in stats.columns: stats[c] = 0
-            return stats[['成功', '失敗']].reindex(['2P', '3P', 'FT'], fill_value=0)
-        
-        s_stats_h = get_shot_stats(df_h_graph)
-        s_stats_a = get_shot_stats(df_a_graph)
-        max_y_overall = max(s_stats_h.sum(axis=1).max(), s_stats_a.sum(axis=1).max())
-        max_y_overall = int(max_y_overall) + 1 if max_y_overall > 0 else 5
-        
-        g1, g2 = st.columns(2)
-        with g1:
-            st.write(f"🔵 **{sel_h}**" if sel_h != "全体" else f"🔵 **{st.session_state.home_name}**")
-            if s_stats_h.sum().sum() > 0: draw_stacked_chart(s_stats_h, '項目', max_y_overall)
-            else: st.caption("データなし")
-        with g2:
-            st.write(f"🔴 **{sel_a}**" if sel_a != "全体" else f"🔴 **{st.session_state.away_name}**")
-            if s_stats_a.sum().sum() > 0: draw_stacked_chart(s_stats_a, '項目', max_y_overall)
-            else: st.caption("データなし")
-
-        st.subheader(f"② エリア別シュート分布 ({selected_q_graph})")
-        area_target = st.radio("表示項目", ["2P", "3P"], horizontal=True, label_visibility="collapsed", key="area_target_radio")
-        def get_area_stats(df, target, areas_order):
-            sh = df[df['項目'] == target]
-            if sh.empty: return pd.DataFrame(columns=['成功', '失敗'], index=areas_order).fillna(0)
-            stats = sh.groupby(['詳細', '結果']).size().unstack(fill_value=0)
-            for c in ['成功', '失敗']:
-                if c not in stats.columns: stats[c] = 0
-            return stats[['成功', '失敗']].reindex(areas_order, fill_value=0)
-
-        areas_order = ["左下", "中下", "右下", "左レ", "中レ", "右レ", "左角", "左45", "中", "右45", "右角"] if area_target == "2P" else ["左角", "左45", "中", "右45", "右角"]
-        a_stats_h = get_area_stats(df_h_graph, area_target, areas_order)
-        a_stats_a = get_area_stats(df_a_graph, area_target, areas_order)
-        max_y_area = max(a_stats_h.sum(axis=1).max(), a_stats_a.sum(axis=1).max())
-        max_y_area = int(max_y_area) + 1 if max_y_area > 0 else 5
-        
-        ga1, ga2 = st.columns(2)
-        with ga1:
-            st.write(f"🔵 **{sel_h}**" if sel_h != "全体" else f"🔵 **{st.session_state.home_name}**")
-            if a_stats_h.sum().sum() > 0: draw_stacked_chart(a_stats_h, '詳細', max_y_area)
-            else: st.caption("データなし")
-        with ga2:
-            st.write(f"🔴 **{sel_a}**" if sel_a != "全体" else f"🔴 **{st.session_state.away_name}**")
-            if a_stats_a.sum().sum() > 0: draw_stacked_chart(a_stats_a, '詳細', max_y_area)
-            else: st.caption("データなし")
-
-        st.subheader(f"③ リバウンド ({selected_q_graph})")
-        def get_reb_stats(df):
-            sh = df[df['項目'].isin(['OR', 'DR'])]
-            if sh.empty: return pd.Series({'OR':0, 'DR':0})
-            stats = sh.groupby('項目').size()
-            for c in ['OR', 'DR']:
-                if c not in stats.index: stats[c] = 0
-            return stats[['OR', 'DR']]
+            st.write("▼ グラフ表示の対象選手")
+            h_players = ["全体"] + sorted([p.replace('番','') for p in filtered_history[filtered_history['チーム']==st.session_state.home_name]['名前'].unique() if p != 'TEAM'], key=safe_sort_key)
+            sel_h = st.radio(f"🔵 {st.session_state.home_name} 選手選択", h_players, horizontal=True, label_visibility="collapsed")
             
-        r_stats_h = get_reb_stats(df_h_graph)
-        r_stats_a = get_reb_stats(df_a_graph)
-        max_y_reb = max(r_stats_h.max(), r_stats_a.max())
-        max_y_reb = int(max_y_reb) + 1 if max_y_reb > 0 else 5
-        
-        gr1, gr2 = st.columns(2)
-        with gr1:
-            st.write(f"🔵 **{sel_h}**" if sel_h != "全体" else f"🔵 **{st.session_state.home_name}**")
-            if r_stats_h.sum() > 0: draw_simple_bar_chart(r_stats_h, '種類', max_y_reb, ['OR', 'DR'], ['#ff9f43', '#3498db'])
-            else: st.caption("データなし")
-        with gr2:
-            st.write(f"🔴 **{sel_a}**" if sel_a != "全体" else f"🔴 **{st.session_state.away_name}**")
-            if r_stats_a.sum() > 0: draw_simple_bar_chart(r_stats_a, '種類', max_y_reb, ['OR', 'DR'], ['#ff9f43', '#3498db'])
-            else: st.caption("データなし")
+            a_players = ["全体"] + sorted([p.replace('番','') for p in filtered_history[filtered_history['チーム']==st.session_state.away_name]['名前'].unique() if p != 'TEAM'], key=safe_sort_key)
+            sel_a = st.radio(f"🔴 {st.session_state.away_name} 選手選択", a_players, horizontal=True, label_visibility="collapsed")
 
-        st.subheader(f"④ ターンオーバー ({selected_q_graph})")
-        def get_to_stats(df):
-            sh = df[df['項目'] == 'TO']
-            to_cols = ['TV', 'DD', 'PM', '24S']
-            if sh.empty: return pd.Series({c:0 for c in to_cols})
-            stats = sh.groupby('詳細').size()
-            for c in to_cols:
-                if c not in stats.index: stats[c] = 0
-            return stats[to_cols]
+            df_h_graph = filtered_history[filtered_history['チーム'] == st.session_state.home_name]
+            if sel_h != "全体": df_h_graph = df_h_graph[df_h_graph['名前'] == f"{sel_h}番"]
+                
+            df_a_graph = filtered_history[filtered_history['チーム'] == st.session_state.away_name]
+            if sel_a != "全体": df_a_graph = df_a_graph[df_a_graph['名前'] == f"{sel_a}番"]
+
+            st.subheader(f"① 全体シュート ({selected_q_graph})")
+            def get_shot_stats(df):
+                sh = df[df['項目'].isin(['2P', '3P', 'FT'])]
+                if sh.empty: return pd.DataFrame(columns=['成功', '失敗'], index=['2P', '3P', 'FT']).fillna(0)
+                stats = sh.groupby(['項目', '結果']).size().unstack(fill_value=0)
+                for c in ['成功', '失敗']:
+                    if c not in stats.columns: stats[c] = 0
+                return stats[['成功', '失敗']].reindex(['2P', '3P', 'FT'], fill_value=0)
             
-        to_stats_h = get_to_stats(df_h_graph)
-        to_stats_a = get_to_stats(df_a_graph)
-        max_y_to = max(to_stats_h.max(), to_stats_a.max())
-        max_y_to = int(max_y_to) + 1 if max_y_to > 0 else 5
-        
-        gt1, gt2 = st.columns(2)
-        with gt1:
-            st.write(f"🔵 **{sel_h}**" if sel_h != "全体" else f"🔵 **{st.session_state.home_name}**")
-            if to_stats_h.sum() > 0: draw_simple_bar_chart(to_stats_h, '詳細', max_y_to, ['TV', 'DD', 'PM', '24S'], ['#95a5a6', '#95a5a6', '#95a5a6', '#95a5a6'])
-            else: st.caption("データなし")
-        with gt2:
-            st.write(f"🔴 **{sel_a}**" if sel_a != "全体" else f"🔴 **{st.session_state.away_name}**")
-            if to_stats_a.sum() > 0: draw_simple_bar_chart(to_stats_a, '詳細', max_y_to, ['TV', 'DD', 'PM', '24S'], ['#95a5a6', '#95a5a6', '#95a5a6', '#95a5a6'])
-            else: st.caption("データなし")
+            s_stats_h = get_shot_stats(df_h_graph)
+            s_stats_a = get_shot_stats(df_a_graph)
+            max_y_overall = max(s_stats_h.sum(axis=1).max(), s_stats_a.sum(axis=1).max())
+            max_y_overall = int(max_y_overall) + 1 if max_y_overall > 0 else 5
+            
+            g1, g2 = st.columns(2)
+            with g1:
+                st.write(f"🔵 **{sel_h}**" if sel_h != "全体" else f"🔵 **{st.session_state.home_name}**")
+                if s_stats_h.sum().sum() > 0: draw_stacked_chart(s_stats_h, '項目', max_y_overall)
+                else: st.caption("データなし")
+            with g2:
+                st.write(f"🔴 **{sel_a}**" if sel_a != "全体" else f"🔴 **{st.session_state.away_name}**")
+                if s_stats_a.sum().sum() > 0: draw_stacked_chart(s_stats_a, '項目', max_y_overall)
+                else: st.caption("データなし")
 
-        st.header("3. 個人スタッツ")
-        def get_stats_df(t_name, p_list_all):
-            df = st.session_state.history[st.session_state.history['チーム'] == t_name]
-            rows = []
-            tp, tm2i, tm2a, tm3i, tm3a, tfi, tfa, tor, tdr, tast, tstl, tf, ttv, tdd, tpm, ts24 = [0]*16
-            def fmt_stat(m, a): return f"{m}/{a}\n{(m/a*100):.0f}%" if a > 0 else "0/0\n0%"
-            for p_num in p_list_all:
-                pn = f"{p_num}番"; pdf = df[df['名前'] == pn]
-                m2i, m2a = len(pdf[(pdf['項目']=='2P') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='2P'])
-                m3i, m3a = len(pdf[(pdf['項目']=='3P') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='3P'])
-                fi, fa = len(pdf[(pdf['項目']=='FT') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='FT'])
-                orb, drb = len(pdf[pdf['項目']=='OR']), len(pdf[pdf['項目']=='DR'])
-                ast, stl, f = len(pdf[pdf['項目']=='AST']), len(pdf[pdf['項目']=='STL']), len(pdf[pdf['項目']=='Foul'])
-                to = pdf[pdf['項目']=='TO']; tv, dd, pm, s24 = len(to[to['詳細']=='TV']), len(to[to['詳細']=='DD']), len(to[to['詳細']=='PM']), len(to[to['詳細']=='24S'])
-                p = pdf['点数'].sum()
-                tp+=p; tm2i+=m2i; tm2a+=m2a; tm3i+=m3i; tm3a+=m3a; tfi+=fi; tfa+=fa; tor+=orb; tdr+=drb; tast+=ast; tstl+=stl; tf+=f; ttv+=tv; tdd+=dd; tpm+=pm; ts24+=s24
-                rows.append({'#': p_num, 'Pts': p, 'FG\n(M/A)': fmt_stat(m2i+m3i, m2a+m3a), '3P\n(M/A)': fmt_stat(m3i, m3a), 'FT\n(M/A)': fmt_stat(fi, fa), 
-                             'REB\n(D/O)': f"{drb+orb}\n({drb}/{orb})", 'As': ast, 'St': stl, 'F': f, 'TO\n(T/D/P/2)': f"{tv+dd+pm+s24}\n({tv}/{dd}/{pm}/{s24})", 'Team': t_name})
-            rows.append({'#': 'Total', 'Pts': tp, 'FG\n(M/A)': fmt_stat(tm2i+tm3i, tm2a+tm3a), '3P\n(M/A)': fmt_stat(tm3i, tm3a), 'FT\n(M/A)': fmt_stat(tfi, tfa), 
-                         'REB\n(D/O)': f"{tdr+tor}\n({tdr}/{tor})", 'As': tast, 'St': tstl, 'F': tf, 'TO\n(T/D/P/2)': f"{ttv+tdd+tpm+ts24}\n({ttv}/{tdd}/{tpm}/{ts24})", 'Team': t_name})
-            return pd.DataFrame(rows)
-        
-        h_df = get_stats_df(st.session_state.home_name, all_h); a_df = get_stats_df(st.session_state.away_name, all_a)
-        st.write(f"🔵 **{st.session_state.home_name}**"); st.table(h_df.drop(columns='Team').set_index('#'))
-        st.write(f"🔴 **{st.session_state.away_name}**"); st.table(a_df.drop(columns='Team').set_index('#'))
+            st.subheader(f"② エリア別シュート分布 ({selected_q_graph})")
+            area_target = st.radio("表示項目", ["2P", "3P"], horizontal=True, label_visibility="collapsed", key="area_target_radio")
+            def get_area_stats(df, target, areas_order):
+                sh = df[df['項目'] == target]
+                if sh.empty: return pd.DataFrame(columns=['成功', '失敗'], index=areas_order).fillna(0)
+                stats = sh.groupby(['詳細', '結果']).size().unstack(fill_value=0)
+                for c in ['成功', '失敗']:
+                    if c not in stats.columns: stats[c] = 0
+                return stats[['成功', '失敗']].reindex(areas_order, fill_value=0)
 
-        st.divider()
-        st.header("4. 詳細ログ")
-        st.dataframe(st.session_state.history.iloc[::-1], use_container_width=True)
-        
-        csv_stats = pd.concat([h_df, a_df], ignore_index=True).to_csv(index=False).encode('utf_8_sig')
-        st.download_button("📊 統計CSV保存", csv_stats, f"{st.session_state.tournament_name}_stats.csv", "text/csv")
-        csv_log = st.session_state.history.to_csv(index=False).encode('utf_8_sig')
-        st.download_button("📜 ログCSV保存", csv_log, f"{st.session_state.tournament_name}_log.csv", "text/csv")
+            areas_order = ["左下", "中下", "右下", "左レ", "中レ", "右レ", "左角", "左45", "中", "右45", "右角"] if area_target == "2P" else ["左角", "左45", "中", "右45", "右角"]
+            a_stats_h = get_area_stats(df_h_graph, area_target, areas_order)
+            a_stats_a = get_area_stats(df_a_graph, area_target, areas_order)
+            max_y_area = max(a_stats_h.sum(axis=1).max(), a_stats_a.sum(axis=1).max())
+            max_y_area = int(max_y_area) + 1 if max_y_area > 0 else 5
+            
+            ga1, ga2 = st.columns(2)
+            with ga1:
+                st.write(f"🔵 **{sel_h}**" if sel_h != "全体" else f"🔵 **{st.session_state.home_name}**")
+                if a_stats_h.sum().sum() > 0: draw_stacked_chart(a_stats_h, '詳細', max_y_area)
+                else: st.caption("データなし")
+            with ga2:
+                st.write(f"🔴 **{sel_a}**" if sel_a != "全体" else f"🔴 **{st.session_state.away_name}**")
+                if a_stats_a.sum().sum() > 0: draw_stacked_chart(a_stats_a, '詳細', max_y_area)
+                else: st.caption("データなし")
+
+            st.subheader(f"③ リバウンド ({selected_q_graph})")
+            def get_reb_stats(df):
+                sh = df[df['項目'].isin(['OR', 'DR'])]
+                if sh.empty: return pd.Series({'OR':0, 'DR':0})
+                stats = sh.groupby('項目').size()
+                for c in ['OR', 'DR']:
+                    if c not in stats.index: stats[c] = 0
+                return stats[['OR', 'DR']]
+                
+            r_stats_h = get_reb_stats(df_h_graph)
+            r_stats_a = get_reb_stats(df_a_graph)
+            max_y_reb = max(r_stats_h.max(), r_stats_a.max())
+            max_y_reb = int(max_y_reb) + 1 if max_y_reb > 0 else 5
+            
+            gr1, gr2 = st.columns(2)
+            with gr1:
+                st.write(f"🔵 **{sel_h}**" if sel_h != "全体" else f"🔵 **{st.session_state.home_name}**")
+                if r_stats_h.sum() > 0: draw_simple_bar_chart(r_stats_h, '種類', max_y_reb, ['OR', 'DR'], ['#ff9f43', '#3498db'])
+                else: st.caption("データなし")
+            with gr2:
+                st.write(f"🔴 **{sel_a}**" if sel_a != "全体" else f"🔴 **{st.session_state.away_name}**")
+                if r_stats_a.sum() > 0: draw_simple_bar_chart(r_stats_a, '種類', max_y_reb, ['OR', 'DR'], ['#ff9f43', '#3498db'])
+                else: st.caption("データなし")
+
+            st.subheader(f"④ ターンオーバー ({selected_q_graph})")
+            def get_to_stats(df):
+                sh = df[df['項目'] == 'TO']
+                to_cols = ['TV', 'DD', 'PM', '24S']
+                if sh.empty: return pd.Series({c:0 for c in to_cols})
+                stats = sh.groupby('詳細').size()
+                for c in to_cols:
+                    if c not in stats.index: stats[c] = 0
+                return stats[to_cols]
+                
+            to_stats_h = get_to_stats(df_h_graph)
+            to_stats_a = get_to_stats(df_a_graph)
+            max_y_to = max(to_stats_h.max(), to_stats_a.max())
+            max_y_to = int(max_y_to) + 1 if max_y_to > 0 else 5
+            
+            gt1, gt2 = st.columns(2)
+            with gt1:
+                st.write(f"🔵 **{sel_h}**" if sel_h != "全体" else f"🔵 **{st.session_state.home_name}**")
+                if to_stats_h.sum() > 0: draw_simple_bar_chart(to_stats_h, '詳細', max_y_to, ['TV', 'DD', 'PM', '24S'], ['#95a5a6', '#95a5a6', '#95a5a6', '#95a5a6'])
+                else: st.caption("データなし")
+            with gt2:
+                st.write(f"🔴 **{sel_a}**" if sel_a != "全体" else f"🔴 **{st.session_state.away_name}**")
+                if to_stats_a.sum() > 0: draw_simple_bar_chart(to_stats_a, '詳細', max_y_to, ['TV', 'DD', 'PM', '24S'], ['#95a5a6', '#95a5a6', '#95a5a6', '#95a5a6'])
+                else: st.caption("データなし")
+
+            st.header("3. 個人スタッツ")
+            def get_stats_df(t_name, p_list_all):
+                df = st.session_state.history[st.session_state.history['チーム'] == t_name]
+                rows = []
+                tp, tm2i, tm2a, tm3i, tm3a, tfi, tfa, tor, tdr, tast, tstl, tf, ttv, tdd, tpm, ts24 = [0]*16
+                def fmt_stat(m, a): return f"{m}/{a}\n{(m/a*100):.0f}%" if a > 0 else "0/0\n0%"
+                for p_num in p_list_all:
+                    pn = f"{p_num}番"; pdf = df[df['名前'] == pn]
+                    m2i, m2a = len(pdf[(pdf['項目']=='2P') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='2P'])
+                    m3i, m3a = len(pdf[(pdf['項目']=='3P') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='3P'])
+                    fi, fa = len(pdf[(pdf['項目']=='FT') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='FT'])
+                    orb, drb = len(pdf[pdf['項目']=='OR']), len(pdf[pdf['項目']=='DR'])
+                    ast, stl, f = len(pdf[pdf['項目']=='AST']), len(pdf[pdf['項目']=='STL']), len(pdf[pdf['項目']=='Foul'])
+                    to = pdf[pdf['項目']=='TO']; tv, dd, pm, s24 = len(to[to['詳細']=='TV']), len(to[to['詳細']=='DD']), len(to[to['詳細']=='PM']), len(to[to['詳細']=='24S'])
+                    p = pdf['点数'].sum()
+                    tp+=p; tm2i+=m2i; tm2a+=m2a; tm3i+=m3i; tm3a+=m3a; tfi+=fi; tfa+=fa; tor+=orb; tdr+=drb; tast+=ast; tstl+=stl; tf+=f; ttv+=tv; tdd+=dd; tpm+=pm; ts24+=s24
+                    rows.append({'#': p_num, 'Pts': p, 'FG\n(M/A)': fmt_stat(m2i+m3i, m2a+m3a), '3P\n(M/A)': fmt_stat(m3i, m3a), 'FT\n(M/A)': fmt_stat(fi, fa), 
+                                 'REB\n(D/O)': f"{drb+orb}\n({drb}/{orb})", 'As': ast, 'St': stl, 'F': f, 'TO\n(T/D/P/2)': f"{tv+dd+pm+s24}\n({tv}/{dd}/{pm}/{s24})", 'Team': t_name})
+                rows.append({'#': 'Total', 'Pts': tp, 'FG\n(M/A)': fmt_stat(tm2i+tm3i, tm2a+tm3a), '3P\n(M/A)': fmt_stat(tm3i, tm3a), 'FT\n(M/A)': fmt_stat(tfi, tfa), 
+                             'REB\n(D/O)': f"{tdr+tor}\n({tdr}/{tor})", 'As': tast, 'St': tstl, 'F': tf, 'TO\n(T/D/P/2)': f"{ttv+tdd+tpm+ts24}\n({ttv}/{tdd}/{tpm}/{ts24})", 'Team': t_name})
+                return pd.DataFrame(rows)
+            
+            h_df = get_stats_df(st.session_state.home_name, all_h); a_df = get_stats_df(st.session_state.away_name, all_a)
+            st.write(f"🔵 **{st.session_state.home_name}**"); st.table(h_df.drop(columns='Team').set_index('#'))
+            st.write(f"🔴 **{st.session_state.away_name}**"); st.table(a_df.drop(columns='Team').set_index('#'))
+
+            st.divider()
+            st.header("4. 詳細ログ")
+            st.dataframe(st.session_state.history.iloc[::-1], use_container_width=True)
+            
+            csv_stats = pd.concat([h_df, a_df], ignore_index=True).to_csv(index=False).encode('utf_8_sig')
+            st.download_button("📊 統計CSV保存", csv_stats, f"{st.session_state.tournament_name}_stats.csv", "text/csv")
+            csv_log = st.session_state.history.to_csv(index=False).encode('utf_8_sig')
+            st.download_button("📜 ログCSV保存", csv_log, f"{st.session_state.tournament_name}_log.csv", "text/csv")
 
 with tab_edit:
     st.header("🛠 修正")
@@ -533,4 +540,7 @@ with tab_edit:
             if cols[1].button("🗑️", key=f"del_{i}"):
                 st.session_state.history = st.session_state.history.drop(i); safe_rerun()
 
-save_state()
+# --- アプリの末尾 ---
+# ★軽量化4：ユーザー様提案！入力中はセーブをスキップし、待機中（選手選択/アシスト選択）のみセーブする
+if st.session_state.mode in ["選手選択", "アシスト選択"]:
+    save_state()
