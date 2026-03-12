@@ -7,7 +7,7 @@ import json
 import altair as alt
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V09.3", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V10.0", layout="centered")
 
 # --- 0. CSS注入 ---
 st.markdown("""
@@ -325,12 +325,11 @@ with tab_input:
             if cols_a[i].button(p_num, key=f"a_{p_num}", use_container_width=True):
                 st.session_state.tmp = {'player': p_num, 'team': st.session_state.away_name}; st.session_state.mode = "項目選択"; safe_rerun()
 
-# --- ★グラフ描画用共通関数 (ラベル間引きの無効化を追加！) ---
+# --- グラフ描画用関数 ---
 def draw_fixed_scale_chart(df, x_col, max_y):
     if df.empty: return
     df_m = df.reset_index().melt(id_vars=x_col, var_name='結果', value_name='回数')
     chart = alt.Chart(df_m).mark_bar().encode(
-        # ★ labelOverlap=False を追加してすべての項目名を表示させる！
         x=alt.X(f"{x_col}:N", sort=None, title='', axis=alt.Axis(labelAngle=-45, labelOverlap=False)),
         y=alt.Y('回数:Q', scale=alt.Scale(domain=[0, max_y]), title=''),
         color=alt.Color('結果:N', scale=alt.Scale(domain=['成功', '失敗'], range=['#00b050', '#ff4b4b']), legend=alt.Legend(title="", orient="bottom")),
@@ -348,8 +347,20 @@ with tab_report:
             rep_qs['Total'] = rep_qs.sum(axis=1); st.table(rep_qs.astype(int))
         except: pass
 
-        st.header("2. シュート分析グラフ (全体)")
-        shots_df = st.session_state.history[st.session_state.history['項目'].isin(['2P', '3P', 'FT'])]
+        st.header("2. シュート分析グラフ")
+        
+        # ★追加：グラフ表示用の「Q（期間）」フィルター
+        st.write("▼ グラフ表示の対象期間")
+        selected_q_graph = st.radio("グラフ対象期間", ["Total", "1Q", "2Q", "3Q", "4Q", "OT"], horizontal=True, label_visibility="collapsed")
+        
+        # 選択されたQに基づいてデータをフィルタリング
+        if selected_q_graph == "Total":
+            filtered_history = st.session_state.history
+        else:
+            filtered_history = st.session_state.history[st.session_state.history['Q'] == selected_q_graph]
+
+        st.subheader(f"① 全体シュート ({selected_q_graph})")
+        shots_df = filtered_history[filtered_history['項目'].isin(['2P', '3P', 'FT'])]
         if not shots_df.empty:
             st.markdown("<span style='font-size:11px;'>※ 全体の高さ＝「試行回数」、緑色が「成功」、赤色が「失敗」を表します。<br>※ 左右のグラフの高さ(縦軸)は比較しやすいよう同じ値に固定されています。</span>", unsafe_allow_html=True)
             s_stats = shots_df.groupby(['チーム', '項目', '結果']).size().unstack(fill_value=0)
@@ -374,11 +385,11 @@ with tab_report:
                     draw_fixed_scale_chart(df_a, '項目', max_y_overall)
                 else: st.caption("データなし")
         else:
-            st.info("シュート記録がありません")
+            st.info(f"{selected_q_graph} のシュート記録がありません")
 
-        st.header("3. エリア別シュート分布")
+        st.subheader(f"② エリア別シュート分布 ({selected_q_graph})")
         area_target = st.radio("表示項目", ["2P", "3P"], horizontal=True, label_visibility="collapsed")
-        area_df = st.session_state.history[st.session_state.history['項目'] == area_target]
+        area_df = filtered_history[filtered_history['項目'] == area_target]
         if not area_df.empty:
             a_stats = area_df.groupby(['チーム', '詳細', '結果']).size().unstack(fill_value=0)
             if '成功' not in a_stats.columns: a_stats['成功'] = 0
@@ -407,9 +418,9 @@ with tab_report:
                     draw_fixed_scale_chart(df_aa, '詳細', max_y_area)
                 else: st.caption("データなし")
         else:
-            st.info(f"{area_target}シュートの記録がありません")
+            st.info(f"{selected_q_graph} の {area_target}シュート記録がありません")
 
-        st.header("4. 個人スタッツ")
+        st.header("3. 個人スタッツ")
         def get_stats_df(t_name, p_list_all):
             df = st.session_state.history[st.session_state.history['チーム'] == t_name]
             rows = []
@@ -436,7 +447,7 @@ with tab_report:
         st.write(f"🔴 **{st.session_state.away_name}**"); st.table(a_df.drop(columns='Team').set_index('#'))
 
         st.divider()
-        st.header("5. 詳細ログ")
+        st.header("4. 詳細ログ")
         st.dataframe(st.session_state.history.iloc[::-1], use_container_width=True)
         
         csv_stats = pd.concat([h_df, a_df], ignore_index=True).to_csv(index=False).encode('utf_8_sig')
