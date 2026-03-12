@@ -7,7 +7,7 @@ import json
 import altair as alt
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V11.0", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V11.1", layout="centered")
 
 # --- 0. CSS注入 ---
 st.markdown("""
@@ -150,6 +150,7 @@ with st.sidebar:
     st.text_input("大会名", key="tournament_name")
     st.divider()
     
+    # === HOME ===
     st.text_input("自チーム名", key="home_name")
     new_h = st.text_input(f"🔵 新規選手を追加", placeholder="例: 13。")
     if st.button("＋追加＆出場", key="add_h", use_container_width=True):
@@ -171,8 +172,18 @@ with st.sidebar:
     valid_act_h = [x for x in st.session_state.act_h if x in all_h]
     if st.session_state.act_h != valid_act_h: st.session_state.act_h = valid_act_h
     st.multiselect(f"🔵 {st.session_state.home_name} オンコート", options=all_h, key="act_h")
+    
+    # ★追加：チーム入れ替えボタン
+    st.divider()
+    if st.button("🔁 HOMEとAWAYを入れ替える", use_container_width=True):
+        # チーム名、名簿、オンコートをすべてスワップ！
+        st.session_state.home_name, st.session_state.away_name = st.session_state.away_name, st.session_state.home_name
+        st.session_state.r_str_h, st.session_state.r_str_a = st.session_state.r_str_a, st.session_state.r_str_h
+        st.session_state.act_h, st.session_state.act_a = st.session_state.act_a, st.session_state.act_h
+        safe_rerun()
     st.divider()
     
+    # === AWAY ===
     st.text_input("相手チーム名", key="away_name")
     new_a = st.text_input(f"🔴 新規選手を追加", placeholder="例: ⑨")
     if st.button("＋追加＆出場", key="add_a", use_container_width=True):
@@ -325,7 +336,7 @@ with tab_input:
             if cols_a[i].button(p_num, key=f"a_{p_num}", use_container_width=True):
                 st.session_state.tmp = {'player': p_num, 'team': st.session_state.away_name}; st.session_state.mode = "項目選択"; safe_rerun()
 
-# --- ★グラフ描画用関数 ---
+# --- グラフ描画用関数 ---
 def draw_stacked_chart(df, x_col, max_y):
     if df.empty: return
     df_m = df.reset_index().melt(id_vars=x_col, var_name='結果', value_name='回数')
@@ -362,9 +373,7 @@ with tab_report:
             rep_qs['Total'] = rep_qs.sum(axis=1); st.table(rep_qs.astype(int))
         except: pass
 
-        # ★修正：タイトルを「分析グラフ」に変更
         st.header("2. 分析グラフ")
-        
         st.write("▼ グラフ表示の対象期間")
         selected_q_graph = st.radio("グラフ対象期間", ["Total", "1Q", "2Q", "3Q", "4Q", "OT"], horizontal=True, label_visibility="collapsed")
         
@@ -418,7 +427,6 @@ with tab_report:
                 else: st.caption("データなし")
         else: st.info(f"{selected_q_graph} の {area_target}シュート記録がありません")
 
-        # ★追加：リバウンド（OR/DR）グラフ
         st.subheader(f"③ リバウンド ({selected_q_graph})")
         reb_df = filtered_history[filtered_history['項目'].isin(['OR', 'DR'])]
         if not reb_df.empty:
@@ -432,7 +440,6 @@ with tab_report:
             with gr1:
                 st.write(f"🔵 **{st.session_state.home_name}**")
                 if st.session_state.home_name in r_stats.index:
-                    # ORはオレンジ、DRは青で表示
                     draw_simple_bar_chart(r_stats.loc[st.session_state.home_name], '種類', max_y_reb, ['OR', 'DR'], ['#ff9f43', '#3498db'])
                 else: st.caption("データなし")
             with gr2:
@@ -442,7 +449,6 @@ with tab_report:
                 else: st.caption("データなし")
         else: st.info(f"{selected_q_graph} のリバウンド記録がありません")
 
-        # ★追加：ターンオーバー内訳グラフ
         st.subheader(f"④ ターンオーバー ({selected_q_graph})")
         to_df = filtered_history[filtered_history['項目'] == 'TO']
         if not to_df.empty:
@@ -457,7 +463,6 @@ with tab_report:
             with gt1:
                 st.write(f"🔵 **{st.session_state.home_name}**")
                 if st.session_state.home_name in to_stats.index:
-                    # ミスなので少し暗めの統一色（グレー）で表示
                     draw_simple_bar_chart(to_stats.loc[st.session_state.home_name], '詳細', max_y_to, to_cols, ['#95a5a6', '#95a5a6', '#95a5a6', '#95a5a6'])
                 else: st.caption("データなし")
             with gt2:
