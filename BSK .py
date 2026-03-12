@@ -6,7 +6,7 @@ import os
 import json
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V08.2", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V09.0", layout="centered")
 
 # --- 0. CSS注入 ---
 st.markdown("""
@@ -18,6 +18,7 @@ st.markdown("""
     [data-testid="stVerticalBlock"] { gap: 0.4rem !important; }
     div[data-testid="stTable"] table { font-size: 9px !important; width: 100% !important; }
     div[data-testid="stTable"] th, div[data-testid="stTable"] td { padding: 2px 1px !important; line-height: 1.1 !important; }
+    .stCode { max-height: 200px; overflow-y: auto; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -42,7 +43,6 @@ def safe_rerun():
     save_state()
     st.rerun()
 
-# 記号を区別しつつ数字順に並べる
 def safe_sort_key(x):
     m = re.search(r'\d+', str(x))
     if m:
@@ -50,21 +50,15 @@ def safe_sort_key(x):
         except: return (1, 0, str(x))
     return (1, 0, str(x))
 
-# --- ★修正：全データリセットの安全な処理 ---
 def reset_all_data():
-    # 古い保存ファイルを消す
     if os.path.exists("auto_save_log.csv"): os.remove("auto_save_log.csv")
     if os.path.exists("auto_save_settings.json"): os.remove("auto_save_settings.json")
-    
-    # データを直接上書きせず、一度削除する（直後のセーフティネットで安全に再構築させるため）
     keys_to_clear = ['history', 'tournament_name', 'home_name', 'away_name', 'r_str_h', 'r_str_a', 'act_h', 'act_a', 'current_q', 'mode', 'tmp']
     for k in keys_to_clear:
         if k in st.session_state:
             del st.session_state[k]
 
-# --- 1. 初回ロード ＆ 鉄壁のセーフティネット ---
-
-# A. 初回起動時のみファイルを読み込む
+# --- 1. 初期化＆セーフティネット ---
 if 'app_init' not in st.session_state:
     st.session_state.app_init = True
     if os.path.exists("auto_save_log.csv"):
@@ -83,7 +77,6 @@ if 'app_init' not in st.session_state:
                 st.session_state[k] = v
         except: pass
 
-# B. 鉄壁のセーフティネット（エラー防止のため、必ず変数を存在させる）
 if 'history' not in st.session_state: st.session_state.history = pd.DataFrame(columns=['id', 'Q', 'チーム', '名前', '項目', '詳細', '結果', '点数'])
 if 'tournament_name' not in st.session_state: st.session_state.tournament_name = "練習試合"
 if 'home_name' not in st.session_state: st.session_state.home_name = "HOME"
@@ -96,7 +89,7 @@ if 'current_q' not in st.session_state: st.session_state.current_q = "1Q"
 if 'mode' not in st.session_state: st.session_state.mode = "選手選択"
 if 'tmp' not in st.session_state: st.session_state.tmp = {}
 
-# --- CSV読み込み処理 ---
+# --- CSV読み込み ---
 def load_csv_data():
     if st.session_state.uploaded_file is not None:
         try:
@@ -157,9 +150,7 @@ with st.sidebar:
     st.text_input("大会名", key="tournament_name")
     st.divider()
     
-    # === HOME ===
     st.text_input("自チーム名", key="home_name")
-    
     new_h = st.text_input(f"🔵 新規選手を追加", placeholder="例: 13。")
     if st.button("＋追加＆出場", key="add_h", use_container_width=True):
         if new_h:
@@ -176,19 +167,13 @@ with st.sidebar:
     with st.expander(f"👥 {st.session_state.home_name} 名簿を手動編集"):
         st.text_area("全背番号 (カンマ区切り)", key="r_str_h")
     
-    # ★修正：安全にリストを取得してチェック
     all_h = [x.strip() for x in st.session_state.r_str_h.split(",") if x.strip()]
     valid_act_h = [x for x in st.session_state.act_h if x in all_h]
-    if st.session_state.act_h != valid_act_h:
-        st.session_state.act_h = valid_act_h
-        
+    if st.session_state.act_h != valid_act_h: st.session_state.act_h = valid_act_h
     st.multiselect(f"🔵 {st.session_state.home_name} オンコート", options=all_h, key="act_h")
-    
     st.divider()
     
-    # === AWAY ===
     st.text_input("相手チーム名", key="away_name")
-    
     new_a = st.text_input(f"🔴 新規選手を追加", placeholder="例: ⑨")
     if st.button("＋追加＆出場", key="add_a", use_container_width=True):
         if new_a:
@@ -207,11 +192,8 @@ with st.sidebar:
     
     all_a = [x.strip() for x in st.session_state.r_str_a.split(",") if x.strip()]
     valid_act_a = [x for x in st.session_state.act_a if x in all_a]
-    if st.session_state.act_a != valid_act_a:
-        st.session_state.act_a = valid_act_a
-        
+    if st.session_state.act_a != valid_act_a: st.session_state.act_a = valid_act_a
     st.multiselect(f"🔴 {st.session_state.away_name} オンコート", options=all_a, key="act_a")
-    
     st.divider()
     
     with st.expander("📂 過去データを復元・確認 (CSV読込)"):
@@ -219,7 +201,6 @@ with st.sidebar:
         st.file_uploader("詳細ログCSVを選択", type=["csv"], label_visibility="collapsed", key="uploaded_file", on_change=load_csv_data)
     
     st.divider()
-    # コールバックで安全に完全初期化を実行
     st.button("🚨 全データリセット (新規試合)", type="primary", use_container_width=True, on_click=reset_all_data)
 
 # --- 3. 共通記録関数 ---
@@ -254,9 +235,7 @@ with tab_input:
 
     st.divider()
     with st.container(border=True):
-        if st.session_state.mode == "選手選択": 
-            st.info("選手をタップ")
-            
+        if st.session_state.mode == "選手選択": st.info("選手をタップ")
         elif st.session_state.mode == "項目選択":
             st.write(f"**#{st.session_state.tmp.get('player')}**")
             c = st.columns(3)
@@ -272,7 +251,6 @@ with tab_input:
                 if st.button("STL", use_container_width=True): record("STL"); safe_rerun()
             with o[2]:
                 if st.button("F", use_container_width=True): record("Foul"); safe_rerun()
-            
             st.write("▼ TurnOver")
             to_cols = st.columns(4)
             for i, val in enumerate(["TV", "DD", "PM", "24S"]):
@@ -332,7 +310,6 @@ with tab_input:
                     if ast_c[i].button(p_num, key=f"ast_{p_num}", use_container_width=True):
                         record("AST", detail=f"to #{scorer}", res="成功", pts=0, team=t_name, name=f"{p_num}番")
                         safe_rerun()
-            
             st.divider()
             if st.button("❌ アシストなし", use_container_width=True):
                 st.session_state.mode = "選手選択"
@@ -348,7 +325,7 @@ with tab_input:
             if cols_a[i].button(p_num, key=f"a_{p_num}", use_container_width=True):
                 st.session_state.tmp = {'player': p_num, 'team': st.session_state.away_name}; st.session_state.mode = "項目選択"; safe_rerun()
 
-# 【タブ2】レポート 
+# --- 【タブ2】レポート ---
 with tab_report:
     if st.session_state.history.empty: st.info("データなし")
     else:
@@ -358,7 +335,36 @@ with tab_report:
             rep_qs['Total'] = rep_qs.sum(axis=1); st.table(rep_qs.astype(int))
         except: pass
 
-        st.header("2. 個人スタッツ")
+        # ★追加：シュートグラフ機能
+        st.header("2. シュート分析グラフ")
+        shots_df = st.session_state.history[st.session_state.history['項目'].isin(['2P', '3P', 'FT'])]
+        if not shots_df.empty:
+            st.markdown("<span style='font-size:11px;'>※ 全体の高さ＝「試行回数」、緑色が「成功」、赤色が「失敗」を表します。</span>", unsafe_allow_html=True)
+            s_stats = shots_df.groupby(['チーム', '項目', '結果']).size().unstack(fill_value=0)
+            if '成功' not in s_stats.columns: s_stats['成功'] = 0
+            if '失敗' not in s_stats.columns: s_stats['失敗'] = 0
+            s_stats = s_stats[['成功', '失敗']]
+            
+            g1, g2 = st.columns(2)
+            with g1:
+                st.write(f"🔵 **{st.session_state.home_name}**")
+                if st.session_state.home_name in s_stats.index.get_level_values('チーム'):
+                    df_h = s_stats.xs(st.session_state.home_name, level='チーム').reindex(['2P', '3P', 'FT'], fill_value=0)
+                    # 緑（成功）と赤（失敗）で色付け
+                    try: st.bar_chart(df_h, color=["#00b050", "#ff4b4b"])
+                    except: st.bar_chart(df_h) # 古いバージョンのStreamlit用フォールバック
+                else: st.caption("データなし")
+            with g2:
+                st.write(f"🔴 **{st.session_state.away_name}**")
+                if st.session_state.away_name in s_stats.index.get_level_values('チーム'):
+                    df_a = s_stats.xs(st.session_state.away_name, level='チーム').reindex(['2P', '3P', 'FT'], fill_value=0)
+                    try: st.bar_chart(df_a, color=["#00b050", "#ff4b4b"])
+                    except: st.bar_chart(df_a)
+                else: st.caption("データなし")
+        else:
+            st.info("シュート記録がありません")
+
+        st.header("3. 個人スタッツ")
         def get_stats_df(t_name, p_list_all):
             df = st.session_state.history[st.session_state.history['チーム'] == t_name]
             rows = []
@@ -380,17 +386,20 @@ with tab_report:
                          'REB\n(D/O)': f"{tdr+tor}\n({tdr}/{tor})", 'As': tast, 'St': tstl, 'F': tf, 'TO\n(T/D/P/2)': f"{ttv+tdd+tpm+ts24}\n({ttv}/{tdd}/{tpm}/{ts24})", 'Team': t_name})
             return pd.DataFrame(rows)
         
-        st.write(f"🔵 **{st.session_state.home_name}**"); h_df = get_stats_df(st.session_state.home_name, all_h); st.table(h_df.drop(columns='Team').set_index('#'))
-        st.write(f"🔴 **{st.session_state.away_name}**"); a_df = get_stats_df(st.session_state.away_name, all_a); st.table(a_df.drop(columns='Team').set_index('#'))
+        h_df = get_stats_df(st.session_state.home_name, all_h); a_df = get_stats_df(st.session_state.away_name, all_a)
+        st.write(f"🔵 **{st.session_state.home_name}**"); st.table(h_df.drop(columns='Team').set_index('#'))
+        st.write(f"🔴 **{st.session_state.away_name}**"); st.table(a_df.drop(columns='Team').set_index('#'))
 
         st.divider()
-        st.header("3. 詳細ログ")
+        st.header("4. 詳細ログ")
         st.dataframe(st.session_state.history.iloc[::-1], use_container_width=True)
         
-        csv_stats = pd.concat([h_df, a_df], ignore_index=True).to_csv(index=False).encode('utf_8_sig')
-        st.download_button("📊 統計CSV保存", csv_stats, f"{st.session_state.tournament_name}_stats.csv", "text/csv")
-        csv_log = st.session_state.history.to_csv(index=False).encode('utf_8_sig')
-        st.download_button("📜 ログCSV保存", csv_log, f"{st.session_state.tournament_name}_log.csv", "text/csv")
+        st.divider()
+        st.header("5. データ書き出し")
+        csv_stats_text = pd.concat([h_df, a_df], ignore_index=True).to_csv(index=False)
+        csv_log_text = st.session_state.history.to_csv(index=False)
+        with st.expander("📊 統計CSVデータをコピー"): st.code(csv_stats_text, language="csv")
+        with st.expander("📜 詳細ログCSVデータをコピー"): st.code(csv_log_text, language="csv")
 
 with tab_edit:
     st.header("🛠 修正")
@@ -401,5 +410,4 @@ with tab_edit:
             if cols[1].button("🗑️", key=f"del_{i}"):
                 st.session_state.history = st.session_state.history.drop(i); safe_rerun()
 
-# --- アプリの末尾で常に状態を上書き保存 ---
 save_state()
