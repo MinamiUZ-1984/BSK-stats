@@ -6,7 +6,7 @@ import os
 import json
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V08.0", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V08.1", layout="centered")
 
 # --- 0. CSS注入 ---
 st.markdown("""
@@ -21,7 +21,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- オートセーブ（自動保存）機能の根幹 ---
+# --- オートセーブ（自動保存）機能 ---
 def save_state():
     if 'history' in st.session_state:
         st.session_state.history.to_csv("auto_save_log.csv", index=False, encoding='utf_8_sig')
@@ -42,7 +42,7 @@ def safe_rerun():
     save_state()
     st.rerun()
 
-# 記号を区別しつつ数字順に並べる安全な関数
+# 記号を区別しつつ数字順に並べる
 def safe_sort_key(x):
     m = re.search(r'\d+', str(x))
     if m:
@@ -50,9 +50,24 @@ def safe_sort_key(x):
         except: return (1, 0, str(x))
     return (1, 0, str(x))
 
+# --- ★新規：全データリセット用コールバック関数 ---
+def reset_all_data():
+    st.session_state.history = pd.DataFrame(columns=['id', 'Q', 'チーム', '名前', '項目', '詳細', '結果', '点数'])
+    st.session_state.tournament_name = "練習試合"
+    st.session_state.home_name = "HOME"
+    st.session_state.away_name = "AWAY"
+    st.session_state.r_str_h = "4,5,6,7,8,9,10,11,12,13,14,15"
+    st.session_state.act_h = ["4","5","6","7","8"]
+    st.session_state.r_str_a = "4,5,6,7,8,9,10,11,12,13,14,15"
+    st.session_state.act_a = ["4","5","6","7","8"]
+    st.session_state.current_q = "1Q"
+    st.session_state.mode = "選手選択"
+    st.session_state.tmp = {}
+    if os.path.exists("auto_save_log.csv"): os.remove("auto_save_log.csv")
+    if os.path.exists("auto_save_settings.json"): os.remove("auto_save_settings.json")
+
 # --- 1. データ初期化 ＆ オートセーブ復元 ---
 if 'initialized' not in st.session_state:
-    # ログデータの復元
     if os.path.exists("auto_save_log.csv"):
         try:
             df = pd.read_csv("auto_save_log.csv")
@@ -65,7 +80,6 @@ if 'initialized' not in st.session_state:
     else:
         st.session_state.history = pd.DataFrame(columns=['id', 'Q', 'チーム', '名前', '項目', '詳細', '結果', '点数'])
 
-    # 設定（チーム名や名簿）の復元
     if os.path.exists("auto_save_settings.json"):
         try:
             with open("auto_save_settings.json", "r", encoding="utf-8") as f:
@@ -99,14 +113,12 @@ def load_csv_data():
         try:
             file_bytes = st.session_state.uploaded_file.getvalue()
             df = pd.read_csv(io.BytesIO(file_bytes))
-            
             if set(['id', 'Q', 'チーム', '名前', '項目', '詳細', '結果', '点数']).issubset(df.columns):
                 df['チーム'] = df['チーム'].astype(str).str.strip()
                 df['名前'] = df['名前'].astype(str).str.strip()
                 df['点数'] = pd.to_numeric(df['点数'], errors='coerce').fillna(0).astype(int)
                 
                 st.session_state.history = df
-                
                 teams = [t for t in df['チーム'].unique() if t and str(t).upper() != 'UNKNOWN']
                 csv_h, csv_a = st.session_state.home_name, st.session_state.away_name
                 if len(teams) == 1:
@@ -131,15 +143,13 @@ def load_csv_data():
                     for p in p_list:
                         p_str = str(p).strip()
                         if p_str.endswith('番'): p_str = p_str[:-1]
-                        if p_str.upper() not in ['TEAM', 'NAN', 'NONE', '']:
-                            res.append(p_str)
+                        if p_str.upper() not in ['TEAM', 'NAN', 'NONE', '']: res.append(p_str)
                     return sorted(res, key=safe_sort_key)
                 
                 h_p = extract_exact_players(csv_h)
                 if h_p:
                     st.session_state.r_str_h = ",".join(h_p)
                     st.session_state.act_h = h_p[:5]
-                    
                 a_p = extract_exact_players(csv_a)
                 if a_p:
                     st.session_state.r_str_a = ",".join(a_p)
@@ -216,22 +226,9 @@ with st.sidebar:
         st.file_uploader("詳細ログCSVを選択", type=["csv"], label_visibility="collapsed", key="uploaded_file", on_change=load_csv_data)
     
     st.divider()
-    # ★ 全データリセットボタン：ここで初めて保存ファイルを破壊する
-    if st.button("🚨 全データリセット (新規試合)", type="primary", use_container_width=True):
-        st.session_state.history = pd.DataFrame(columns=['id', 'Q', 'チーム', '名前', '項目', '詳細', '結果', '点数'])
-        st.session_state.tournament_name = "練習試合"
-        st.session_state.home_name = "HOME"
-        st.session_state.away_name = "AWAY"
-        st.session_state.r_str_h = "4,5,6,7,8,9,10,11,12,13,14,15"
-        st.session_state.act_h = ["4","5","6","7","8"]
-        st.session_state.r_str_a = "4,5,6,7,8,9,10,11,12,13,14,15"
-        st.session_state.act_a = ["4","5","6","7","8"]
-        st.session_state.current_q = "1Q"
-        st.session_state.mode = "選手選択"
-        st.session_state.tmp = {}
-        if os.path.exists("auto_save_log.csv"): os.remove("auto_save_log.csv")
-        if os.path.exists("auto_save_settings.json"): os.remove("auto_save_settings.json")
-        st.rerun()
+    
+    # ★修正：on_clickにコールバック関数を指定して安全にリセットする
+    st.button("🚨 全データリセット (新規試合)", type="primary", use_container_width=True, on_click=reset_all_data)
 
 # --- 3. 共通記録関数 ---
 def record(item, detail="-", res="成功", pts=0, team=None, name=None):
