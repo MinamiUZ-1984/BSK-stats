@@ -6,7 +6,7 @@ import os
 import json
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V09.0", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V09.1", layout="centered")
 
 # --- 0. CSS注入 ---
 st.markdown("""
@@ -18,7 +18,6 @@ st.markdown("""
     [data-testid="stVerticalBlock"] { gap: 0.4rem !important; }
     div[data-testid="stTable"] table { font-size: 9px !important; width: 100% !important; }
     div[data-testid="stTable"] th, div[data-testid="stTable"] td { padding: 2px 1px !important; line-height: 1.1 !important; }
-    .stCode { max-height: 200px; overflow-y: auto; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -335,8 +334,8 @@ with tab_report:
             rep_qs['Total'] = rep_qs.sum(axis=1); st.table(rep_qs.astype(int))
         except: pass
 
-        # ★追加：シュートグラフ機能
-        st.header("2. シュート分析グラフ")
+        # ★追加：シュート全体グラフ
+        st.header("2. シュート分析グラフ (全体)")
         shots_df = st.session_state.history[st.session_state.history['項目'].isin(['2P', '3P', 'FT'])]
         if not shots_df.empty:
             st.markdown("<span style='font-size:11px;'>※ 全体の高さ＝「試行回数」、緑色が「成功」、赤色が「失敗」を表します。</span>", unsafe_allow_html=True)
@@ -350,9 +349,8 @@ with tab_report:
                 st.write(f"🔵 **{st.session_state.home_name}**")
                 if st.session_state.home_name in s_stats.index.get_level_values('チーム'):
                     df_h = s_stats.xs(st.session_state.home_name, level='チーム').reindex(['2P', '3P', 'FT'], fill_value=0)
-                    # 緑（成功）と赤（失敗）で色付け
                     try: st.bar_chart(df_h, color=["#00b050", "#ff4b4b"])
-                    except: st.bar_chart(df_h) # 古いバージョンのStreamlit用フォールバック
+                    except: st.bar_chart(df_h)
                 else: st.caption("データなし")
             with g2:
                 st.write(f"🔴 **{st.session_state.away_name}**")
@@ -364,7 +362,40 @@ with tab_report:
         else:
             st.info("シュート記録がありません")
 
-        st.header("3. 個人スタッツ")
+        # ★追加：エリア別シュート分布 (2P/3P切替)
+        st.header("3. エリア別シュート分布")
+        area_target = st.radio("表示項目", ["2P", "3P"], horizontal=True, label_visibility="collapsed")
+        area_df = st.session_state.history[st.session_state.history['項目'] == area_target]
+        if not area_df.empty:
+            a_stats = area_df.groupby(['チーム', '詳細', '結果']).size().unstack(fill_value=0)
+            if '成功' not in a_stats.columns: a_stats['成功'] = 0
+            if '失敗' not in a_stats.columns: a_stats['失敗'] = 0
+            a_stats = a_stats[['成功', '失敗']]
+            
+            if area_target == "2P":
+                areas_order = ["左下", "中下", "右下", "左レ", "中レ", "右レ", "左角", "左45", "中", "右45", "右角"]
+            else:
+                areas_order = ["左角", "左45", "中", "右45", "右角"]
+            
+            ga1, ga2 = st.columns(2)
+            with ga1:
+                st.write(f"🔵 **{st.session_state.home_name}**")
+                if st.session_state.home_name in a_stats.index.get_level_values('チーム'):
+                    df_ah = a_stats.xs(st.session_state.home_name, level='チーム').reindex(areas_order, fill_value=0)
+                    try: st.bar_chart(df_ah, color=["#00b050", "#ff4b4b"])
+                    except: st.bar_chart(df_ah)
+                else: st.caption("データなし")
+            with ga2:
+                st.write(f"🔴 **{st.session_state.away_name}**")
+                if st.session_state.away_name in a_stats.index.get_level_values('チーム'):
+                    df_aa = a_stats.xs(st.session_state.away_name, level='チーム').reindex(areas_order, fill_value=0)
+                    try: st.bar_chart(df_aa, color=["#00b050", "#ff4b4b"])
+                    except: st.bar_chart(df_aa)
+                else: st.caption("データなし")
+        else:
+            st.info(f"{area_target}シュートの記録がありません")
+
+        st.header("4. 個人スタッツ")
         def get_stats_df(t_name, p_list_all):
             df = st.session_state.history[st.session_state.history['チーム'] == t_name]
             rows = []
@@ -391,15 +422,14 @@ with tab_report:
         st.write(f"🔴 **{st.session_state.away_name}**"); st.table(a_df.drop(columns='Team').set_index('#'))
 
         st.divider()
-        st.header("4. 詳細ログ")
+        st.header("5. 詳細ログ")
         st.dataframe(st.session_state.history.iloc[::-1], use_container_width=True)
         
-        st.divider()
-        st.header("5. データ書き出し")
-        csv_stats_text = pd.concat([h_df, a_df], ignore_index=True).to_csv(index=False)
-        csv_log_text = st.session_state.history.to_csv(index=False)
-        with st.expander("📊 統計CSVデータをコピー"): st.code(csv_stats_text, language="csv")
-        with st.expander("📜 詳細ログCSVデータをコピー"): st.code(csv_log_text, language="csv")
+        # --- ★V08.2の「ダウンロードボタン方式」を維持 ---
+        csv_stats = pd.concat([h_df, a_df], ignore_index=True).to_csv(index=False).encode('utf_8_sig')
+        st.download_button("📊 統計CSV保存", csv_stats, f"{st.session_state.tournament_name}_stats.csv", "text/csv")
+        csv_log = st.session_state.history.to_csv(index=False).encode('utf_8_sig')
+        st.download_button("📜 ログCSV保存", csv_log, f"{st.session_state.tournament_name}_log.csv", "text/csv")
 
 with tab_edit:
     st.header("🛠 修正")
