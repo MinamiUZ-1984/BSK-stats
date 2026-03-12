@@ -4,9 +4,10 @@ import io
 import re
 import os
 import json
+import altair as alt
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V09.1", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V09.2", layout="centered")
 
 # --- 0. CSS注入 ---
 st.markdown("""
@@ -324,6 +325,21 @@ with tab_input:
             if cols_a[i].button(p_num, key=f"a_{p_num}", use_container_width=True):
                 st.session_state.tmp = {'player': p_num, 'team': st.session_state.away_name}; st.session_state.mode = "項目選択"; safe_rerun()
 
+# --- ★グラフ描画用共通関数 (Altairを使用してスケール固定＆装飾) ---
+def draw_fixed_scale_chart(df, x_col, max_y):
+    # データがない場合は空枠で返す
+    if df.empty: return
+    # データをAltair用に変換
+    df_m = df.reset_index().melt(id_vars=x_col, var_name='結果', value_name='回数')
+    chart = alt.Chart(df_m).mark_bar().encode(
+        x=alt.X(f"{x_col}:N", sort=None, title='', axis=alt.Axis(labelAngle=-45)),
+        # Y軸の最大値を「max_y」に固定する！
+        y=alt.Y('回数:Q', scale=alt.Scale(domain=[0, max_y]), title=''),
+        color=alt.Color('結果:N', scale=alt.Scale(domain=['成功', '失敗'], range=['#00b050', '#ff4b4b']), legend=alt.Legend(title="", orient="bottom")),
+        tooltip=[f"{x_col}:N", '結果:N', '回数:Q']
+    ).properties(height=250)
+    st.altair_chart(chart, use_container_width=True)
+
 # --- 【タブ2】レポート ---
 with tab_report:
     if st.session_state.history.empty: st.info("データなし")
@@ -334,35 +350,35 @@ with tab_report:
             rep_qs['Total'] = rep_qs.sum(axis=1); st.table(rep_qs.astype(int))
         except: pass
 
-        # ★追加：シュート全体グラフ
         st.header("2. シュート分析グラフ (全体)")
         shots_df = st.session_state.history[st.session_state.history['項目'].isin(['2P', '3P', 'FT'])]
         if not shots_df.empty:
-            st.markdown("<span style='font-size:11px;'>※ 全体の高さ＝「試行回数」、緑色が「成功」、赤色が「失敗」を表します。</span>", unsafe_allow_html=True)
+            st.markdown("<span style='font-size:11px;'>※ 全体の高さ＝「試行回数」、緑色が「成功」、赤色が「失敗」を表します。<br>※ 左右のグラフの高さ(縦軸)は比較しやすいよう同じ値に固定されています。</span>", unsafe_allow_html=True)
             s_stats = shots_df.groupby(['チーム', '項目', '結果']).size().unstack(fill_value=0)
             if '成功' not in s_stats.columns: s_stats['成功'] = 0
             if '失敗' not in s_stats.columns: s_stats['失敗'] = 0
             s_stats = s_stats[['成功', '失敗']]
+            
+            # --- ★両チームでの最大試行回数を計算し、少し余裕(+1)を持たせる ---
+            max_y_overall = int(s_stats.sum(axis=1).max())
+            max_y_overall = max_y_overall + 1 if max_y_overall > 0 else 5
             
             g1, g2 = st.columns(2)
             with g1:
                 st.write(f"🔵 **{st.session_state.home_name}**")
                 if st.session_state.home_name in s_stats.index.get_level_values('チーム'):
                     df_h = s_stats.xs(st.session_state.home_name, level='チーム').reindex(['2P', '3P', 'FT'], fill_value=0)
-                    try: st.bar_chart(df_h, color=["#00b050", "#ff4b4b"])
-                    except: st.bar_chart(df_h)
+                    draw_fixed_scale_chart(df_h, '項目', max_y_overall)
                 else: st.caption("データなし")
             with g2:
                 st.write(f"🔴 **{st.session_state.away_name}**")
                 if st.session_state.away_name in s_stats.index.get_level_values('チーム'):
                     df_a = s_stats.xs(st.session_state.away_name, level='チーム').reindex(['2P', '3P', 'FT'], fill_value=0)
-                    try: st.bar_chart(df_a, color=["#00b050", "#ff4b4b"])
-                    except: st.bar_chart(df_a)
+                    draw_fixed_scale_chart(df_a, '項目', max_y_overall)
                 else: st.caption("データなし")
         else:
             st.info("シュート記録がありません")
 
-        # ★追加：エリア別シュート分布 (2P/3P切替)
         st.header("3. エリア別シュート分布")
         area_target = st.radio("表示項目", ["2P", "3P"], horizontal=True, label_visibility="collapsed")
         area_df = st.session_state.history[st.session_state.history['項目'] == area_target]
@@ -371,6 +387,10 @@ with tab_report:
             if '成功' not in a_stats.columns: a_stats['成功'] = 0
             if '失敗' not in a_stats.columns: a_stats['失敗'] = 0
             a_stats = a_stats[['成功', '失敗']]
+            
+            # --- ★両チームでの最大試行回数(エリア別)を計算 ---
+            max_y_area = int(a_stats.sum(axis=1).max())
+            max_y_area = max_y_area + 1 if max_y_area > 0 else 5
             
             if area_target == "2P":
                 areas_order = ["左下", "中下", "右下", "左レ", "中レ", "右レ", "左角", "左45", "中", "右45", "右角"]
@@ -382,15 +402,13 @@ with tab_report:
                 st.write(f"🔵 **{st.session_state.home_name}**")
                 if st.session_state.home_name in a_stats.index.get_level_values('チーム'):
                     df_ah = a_stats.xs(st.session_state.home_name, level='チーム').reindex(areas_order, fill_value=0)
-                    try: st.bar_chart(df_ah, color=["#00b050", "#ff4b4b"])
-                    except: st.bar_chart(df_ah)
+                    draw_fixed_scale_chart(df_ah, '詳細', max_y_area)
                 else: st.caption("データなし")
             with ga2:
                 st.write(f"🔴 **{st.session_state.away_name}**")
                 if st.session_state.away_name in a_stats.index.get_level_values('チーム'):
                     df_aa = a_stats.xs(st.session_state.away_name, level='チーム').reindex(areas_order, fill_value=0)
-                    try: st.bar_chart(df_aa, color=["#00b050", "#ff4b4b"])
-                    except: st.bar_chart(df_aa)
+                    draw_fixed_scale_chart(df_aa, '詳細', max_y_area)
                 else: st.caption("データなし")
         else:
             st.info(f"{area_target}シュートの記録がありません")
@@ -425,7 +443,6 @@ with tab_report:
         st.header("5. 詳細ログ")
         st.dataframe(st.session_state.history.iloc[::-1], use_container_width=True)
         
-        # --- ★V08.2の「ダウンロードボタン方式」を維持 ---
         csv_stats = pd.concat([h_df, a_df], ignore_index=True).to_csv(index=False).encode('utf_8_sig')
         st.download_button("📊 統計CSV保存", csv_stats, f"{st.session_state.tournament_name}_stats.csv", "text/csv")
         csv_log = st.session_state.history.to_csv(index=False).encode('utf_8_sig')
