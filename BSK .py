@@ -7,7 +7,7 @@ import json
 import altair as alt
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V12.0", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V12.1", layout="centered")
 
 # --- 0. CSS注入 ---
 st.markdown("""
@@ -309,6 +309,7 @@ with tab_input:
             
             active_list = st.session_state.act_h if t_name == st.session_state.home_name else st.session_state.act_a
             assist_candidates = [p for p in active_list if p != scorer]
+            
             if assist_candidates:
                 ast_c = st.columns(len(assist_candidates))
                 for i, p_num in enumerate(assist_candidates):
@@ -368,29 +369,26 @@ with tab_report:
         except: pass
 
         st.header("2. 分析グラフ")
-        
-        # --- ★ 期間（Q）と選手（個人）のダブルフィルター ---
         st.write("▼ グラフ表示の対象期間")
         selected_q_graph = st.radio("グラフ対象期間", ["Total", "1Q", "2Q", "3Q", "4Q", "OT"], horizontal=True, label_visibility="collapsed")
         
         if selected_q_graph == "Total": filtered_history = st.session_state.history
         else: filtered_history = st.session_state.history[st.session_state.history['Q'] == selected_q_graph]
 
-        st.write("▼ グラフ表示の対象選手（全体 or 個人）")
-        col_ts1, col_ts2 = st.columns(2)
-        with col_ts1:
-            h_players = ["チーム全体"] + sorted([p.replace('番','') for p in filtered_history[filtered_history['チーム']==st.session_state.home_name]['名前'].unique() if p != 'TEAM'], key=safe_sort_key)
-            sel_h = st.selectbox(f"🔵 {st.session_state.home_name}", h_players)
-        with col_ts2:
-            a_players = ["チーム全体"] + sorted([p.replace('番','') for p in filtered_history[filtered_history['チーム']==st.session_state.away_name]['名前'].unique() if p != 'TEAM'], key=safe_sort_key)
-            sel_a = st.selectbox(f"🔴 {st.session_state.away_name}", a_players)
+        # ★修正：selectboxからradio(horizontal=True)に変更し、キーボード出現を完全阻止！
+        st.write("▼ グラフ表示の対象選手")
+        h_players = ["全体"] + sorted([p.replace('番','') for p in filtered_history[filtered_history['チーム']==st.session_state.home_name]['名前'].unique() if p != 'TEAM'], key=safe_sort_key)
+        sel_h = st.radio(f"🔵 {st.session_state.home_name} 選手選択", h_players, horizontal=True, label_visibility="collapsed")
+        
+        a_players = ["全体"] + sorted([p.replace('番','') for p in filtered_history[filtered_history['チーム']==st.session_state.away_name]['名前'].unique() if p != 'TEAM'], key=safe_sort_key)
+        sel_a = st.radio(f"🔴 {st.session_state.away_name} 選手選択", a_players, horizontal=True, label_visibility="collapsed")
 
-        # 選択された選手でさらにデータを絞り込む
+        # 選択された選手でデータを絞り込む
         df_h_graph = filtered_history[filtered_history['チーム'] == st.session_state.home_name]
-        if sel_h != "チーム全体": df_h_graph = df_h_graph[df_h_graph['名前'] == f"{sel_h}番"]
+        if sel_h != "全体": df_h_graph = df_h_graph[df_h_graph['名前'] == f"{sel_h}番"]
             
         df_a_graph = filtered_history[filtered_history['チーム'] == st.session_state.away_name]
-        if sel_a != "チーム全体": df_a_graph = df_a_graph[df_a_graph['名前'] == f"{sel_a}番"]
+        if sel_a != "全体": df_a_graph = df_a_graph[df_a_graph['名前'] == f"{sel_a}番"]
 
         st.subheader(f"① 全体シュート ({selected_q_graph})")
         def get_shot_stats(df):
@@ -408,16 +406,16 @@ with tab_report:
         
         g1, g2 = st.columns(2)
         with g1:
-            st.write(f"🔵 **{sel_h}**" if sel_h != "チーム全体" else f"🔵 **{st.session_state.home_name}**")
+            st.write(f"🔵 **{sel_h}**" if sel_h != "全体" else f"🔵 **{st.session_state.home_name}**")
             if s_stats_h.sum().sum() > 0: draw_stacked_chart(s_stats_h, '項目', max_y_overall)
             else: st.caption("データなし")
         with g2:
-            st.write(f"🔴 **{sel_a}**" if sel_a != "チーム全体" else f"🔴 **{st.session_state.away_name}**")
+            st.write(f"🔴 **{sel_a}**" if sel_a != "全体" else f"🔴 **{st.session_state.away_name}**")
             if s_stats_a.sum().sum() > 0: draw_stacked_chart(s_stats_a, '項目', max_y_overall)
             else: st.caption("データなし")
 
         st.subheader(f"② エリア別シュート分布 ({selected_q_graph})")
-        area_target = st.radio("表示項目", ["2P", "3P"], horizontal=True, label_visibility="collapsed")
+        area_target = st.radio("表示項目", ["2P", "3P"], horizontal=True, label_visibility="collapsed", key="area_target_radio")
         def get_area_stats(df, target, areas_order):
             sh = df[df['項目'] == target]
             if sh.empty: return pd.DataFrame(columns=['成功', '失敗'], index=areas_order).fillna(0)
@@ -434,11 +432,11 @@ with tab_report:
         
         ga1, ga2 = st.columns(2)
         with ga1:
-            st.write(f"🔵 **{sel_h}**" if sel_h != "チーム全体" else f"🔵 **{st.session_state.home_name}**")
+            st.write(f"🔵 **{sel_h}**" if sel_h != "全体" else f"🔵 **{st.session_state.home_name}**")
             if a_stats_h.sum().sum() > 0: draw_stacked_chart(a_stats_h, '詳細', max_y_area)
             else: st.caption("データなし")
         with ga2:
-            st.write(f"🔴 **{sel_a}**" if sel_a != "チーム全体" else f"🔴 **{st.session_state.away_name}**")
+            st.write(f"🔴 **{sel_a}**" if sel_a != "全体" else f"🔴 **{st.session_state.away_name}**")
             if a_stats_a.sum().sum() > 0: draw_stacked_chart(a_stats_a, '詳細', max_y_area)
             else: st.caption("データなし")
 
@@ -458,11 +456,11 @@ with tab_report:
         
         gr1, gr2 = st.columns(2)
         with gr1:
-            st.write(f"🔵 **{sel_h}**" if sel_h != "チーム全体" else f"🔵 **{st.session_state.home_name}**")
+            st.write(f"🔵 **{sel_h}**" if sel_h != "全体" else f"🔵 **{st.session_state.home_name}**")
             if r_stats_h.sum() > 0: draw_simple_bar_chart(r_stats_h, '種類', max_y_reb, ['OR', 'DR'], ['#ff9f43', '#3498db'])
             else: st.caption("データなし")
         with gr2:
-            st.write(f"🔴 **{sel_a}**" if sel_a != "チーム全体" else f"🔴 **{st.session_state.away_name}**")
+            st.write(f"🔴 **{sel_a}**" if sel_a != "全体" else f"🔴 **{st.session_state.away_name}**")
             if r_stats_a.sum() > 0: draw_simple_bar_chart(r_stats_a, '種類', max_y_reb, ['OR', 'DR'], ['#ff9f43', '#3498db'])
             else: st.caption("データなし")
 
@@ -483,11 +481,11 @@ with tab_report:
         
         gt1, gt2 = st.columns(2)
         with gt1:
-            st.write(f"🔵 **{sel_h}**" if sel_h != "チーム全体" else f"🔵 **{st.session_state.home_name}**")
+            st.write(f"🔵 **{sel_h}**" if sel_h != "全体" else f"🔵 **{st.session_state.home_name}**")
             if to_stats_h.sum() > 0: draw_simple_bar_chart(to_stats_h, '詳細', max_y_to, ['TV', 'DD', 'PM', '24S'], ['#95a5a6', '#95a5a6', '#95a5a6', '#95a5a6'])
             else: st.caption("データなし")
         with gt2:
-            st.write(f"🔴 **{sel_a}**" if sel_a != "チーム全体" else f"🔴 **{st.session_state.away_name}**")
+            st.write(f"🔴 **{sel_a}**" if sel_a != "全体" else f"🔴 **{st.session_state.away_name}**")
             if to_stats_a.sum() > 0: draw_simple_bar_chart(to_stats_a, '詳細', max_y_to, ['TV', 'DD', 'PM', '24S'], ['#95a5a6', '#95a5a6', '#95a5a6', '#95a5a6'])
             else: st.caption("データなし")
 
