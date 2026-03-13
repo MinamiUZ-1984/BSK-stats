@@ -7,7 +7,7 @@ import json
 import altair as alt
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V13.0", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V14.0", layout="centered")
 
 # --- 0. CSS注入 ---
 st.markdown("""
@@ -22,11 +22,29 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- ★軽量化1：オートセーブ機能のスマート化 ---
+# --- ★新規：合言葉（ルーム）ログイン画面 ---
+if 'room_key' not in st.session_state:
+    st.title("🏀 バスケ分析Pro")
+    st.info("💡 **合言葉（ルーム名）** を入力してスタートしてください。\n\n別の合言葉を使えば、複数人で同時に違う試合を記録・分析できます。")
+    
+    room_input = st.text_input("合言葉（例：コートA、テスト用 など）")
+    if st.button("🚪 記録・分析ルームに入る", type="primary", use_container_width=True):
+        if room_input.strip() == "":
+            st.error("合言葉を入力してください！")
+        else:
+            st.session_state.room_key = room_input.strip()
+            st.rerun()
+    st.stop() # 合言葉を入れるまでここから下のプログラムは動かさない
+
+# --- 合言葉に基づいた専用のファイル名を設定 ---
+ROOM = st.session_state.room_key
+LOG_FILE = f"auto_save_log_{ROOM}.csv"
+SET_FILE = f"auto_save_settings_{ROOM}.json"
+
+# --- 軽量化1：オートセーブ機能のスマート化 ---
 def save_state():
-    # 実際にデータが保存される処理
     if 'history' in st.session_state:
-        st.session_state.history.to_csv("auto_save_log.csv", index=False, encoding='utf_8_sig')
+        st.session_state.history.to_csv(LOG_FILE, index=False, encoding='utf_8_sig')
     settings = {
         'tournament_name': st.session_state.get('tournament_name', '練習試合'),
         'home_name': st.session_state.get('home_name', 'HOME'),
@@ -37,11 +55,10 @@ def save_state():
         'act_a': st.session_state.get('act_a', ['4','5','6','7','8']),
         'current_q': st.session_state.get('current_q', '1Q')
     }
-    with open("auto_save_settings.json", "w", encoding="utf-8") as f:
+    with open(SET_FILE, "w", encoding="utf-8") as f:
         json.dump(settings, f, ensure_ascii=False)
 
 def safe_rerun():
-    # ★軽量化2：入力アクションが起きたら、レポートの重い計算フラグを強制OFFにして軽くする！
     st.session_state.report_trigger = False
     st.rerun()
 
@@ -54,8 +71,8 @@ def safe_sort_key(x):
 
 # --- コールバック関数 ---
 def reset_all_data():
-    if os.path.exists("auto_save_log.csv"): os.remove("auto_save_log.csv")
-    if os.path.exists("auto_save_settings.json"): os.remove("auto_save_settings.json")
+    if os.path.exists(LOG_FILE): os.remove(LOG_FILE)
+    if os.path.exists(SET_FILE): os.remove(SET_FILE)
     keys_to_clear = ['history', 'tournament_name', 'home_name', 'away_name', 'r_str_h', 'r_str_a', 'act_h', 'act_a', 'current_q', 'mode', 'tmp', 'report_trigger']
     for k in keys_to_clear:
         if k in st.session_state: del st.session_state[k]
@@ -91,20 +108,25 @@ def add_a_player():
         st.session_state.act_a = curr_act_a
         st.session_state.new_a_input = ""
 
+def logout_room():
+    # 部屋を出る（合言葉リセット）
+    del st.session_state['room_key']
+    st.rerun()
+
 # --- 1. 初期化＆セーフティネット ---
 if 'app_init' not in st.session_state:
     st.session_state.app_init = True
-    if os.path.exists("auto_save_log.csv"):
+    if os.path.exists(LOG_FILE):
         try:
-            df = pd.read_csv("auto_save_log.csv")
+            df = pd.read_csv(LOG_FILE)
             df['チーム'] = df['チーム'].astype(str).str.strip()
             df['名前'] = df['名前'].astype(str).str.strip()
             df['点数'] = pd.to_numeric(df['点数'], errors='coerce').fillna(0).astype(int)
             st.session_state.history = df
         except: pass
-    if os.path.exists("auto_save_settings.json"):
+    if os.path.exists(SET_FILE):
         try:
-            with open("auto_save_settings.json", "r", encoding="utf-8") as f:
+            with open(SET_FILE, "r", encoding="utf-8") as f:
                 s = json.load(f)
             for k, v in s.items():
                 st.session_state[k] = v
@@ -166,12 +188,16 @@ def load_csv_data():
                 if a_p:
                     st.session_state.r_str_a = ",".join(a_p)
                     st.session_state.act_a = a_p[:5]
-                st.toast("✅ データを完全に復元しました！")
+                st.toast(f"✅ 【{ROOM}】ルームにデータを復元しました！")
             else: st.error("対応していないCSV形式です。")
         except Exception as e: st.error(f"読み込みエラー: {e}")
 
 # --- 2. サイドバー ---
 with st.sidebar:
+    st.success(f"🚪 現在のルーム: **{ROOM}**")
+    st.button("⬅️ ルームを出る（合言葉変更）", use_container_width=True, on_click=logout_room)
+    st.divider()
+
     st.header("🏆 試合設定")
     st.text_input("大会名", key="tournament_name")
     st.divider()
@@ -227,7 +253,6 @@ with tab_input:
             qs['Total'] = qs.sum(axis=1); st.table(qs.astype(int))
         except: pass
     
-    # Qを切り替えた時もレポートフラグをリセットして軽くする
     st.radio("Q", ["1Q", "2Q", "3Q", "4Q", "OT"], horizontal=True, label_visibility="collapsed", key="current_q", on_change=safe_rerun)
 
     st.write(f"🔵 **{st.session_state.home_name}**")
@@ -362,14 +387,12 @@ with tab_report:
     if st.session_state.history.empty: 
         st.info("データなし")
     else:
-        # ★軽量化3：ボタンが押されるまでは重いグラフ計算をサボる！
         if not st.session_state.report_trigger:
             st.info("⚡ 試合中の入力スピードを最優先するため、グラフとスタッツは非表示になっています。")
             if st.button("📊 最新のデータでレポートを計算・表示する", use_container_width=True, type="primary"):
                 st.session_state.report_trigger = True
                 st.rerun()
         
-        # グラフ計算フラグがONの時だけ全処理を実行
         if st.session_state.report_trigger:
             st.header("1. スコア推移")
             try:
@@ -541,6 +564,5 @@ with tab_edit:
                 st.session_state.history = st.session_state.history.drop(i); safe_rerun()
 
 # --- アプリの末尾 ---
-# ★軽量化4：ユーザー様提案！入力中はセーブをスキップし、待機中（選手選択/アシスト選択）のみセーブする
 if st.session_state.mode in ["選手選択", "アシスト選択"]:
     save_state()
