@@ -8,7 +8,7 @@ import altair as alt
 import uuid
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V15.1", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V15.2", layout="centered")
 
 # --- 0. CSS注入 ---
 st.markdown("""
@@ -29,18 +29,18 @@ if 'user_id' not in st.session_state:
 if 'read_only' not in st.session_state:
     st.session_state.read_only = False
 
-# --- ★新規：合言葉（ルーム）ログイン＆ロック画面 ---
+# --- ★変更：使用者名ログイン＆ロック画面 ---
 if 'room_key' not in st.session_state:
     st.title("🏀 バスケ分析Pro")
-    st.info("💡 **合言葉（ルーム名）** を入力してスタートしてください。")
+    st.info("💡 **使用者名** を入力してスタートしてください。")
     
-    room_input = st.text_input("合言葉（例：コートA、テスト用 など）")
+    room_input = st.text_input("使用者名（例：山田花子 など）")
     
     col1, col2 = st.columns(2)
     # 記録者として入るボタン
     if col1.button("🚪 記録者として入る", type="primary", use_container_width=True):
         if room_input.strip() == "":
-            st.error("合言葉を入力してください！")
+            st.error("使用者名を入力してください！")
         else:
             room = room_input.strip()
             lock_file = f"lock_{room}.txt"
@@ -63,7 +63,7 @@ if 'room_key' not in st.session_state:
     # 見るだけモードで入るボタン
     if col2.button("👀 見るだけモード", use_container_width=True):
          if room_input.strip() == "":
-            st.error("合言葉を入力してください！")
+            st.error("使用者名を入力してください！")
          else:
             st.session_state.room_key = room_input.strip()
             st.session_state.read_only = True
@@ -72,7 +72,7 @@ if 'room_key' not in st.session_state:
     # 警告メッセージと強制奪取ボタン
     if st.session_state.get('show_lock_warning'):
         warn_room = st.session_state.show_lock_warning
-        st.warning(f"⚠️ 合言葉「{warn_room}」は現在他の人が記録中です！\n\n・「👀 見るだけモード」で入るか、別の合言葉にしてください。")
+        st.warning(f"⚠️ 使用者名「{warn_room}」は現在他の人が記録中です！\n\n・「👀 見るだけモード」で入るか、別の使用者名にしてください。")
         if st.button("🚨 強制的に記録者として奪う（前の人がアプリを閉じた場合）"):
             with open(f"lock_{warn_room}.txt", "w") as f:
                 f.write(st.session_state.user_id)
@@ -81,9 +81,9 @@ if 'room_key' not in st.session_state:
             del st.session_state['show_lock_warning']
             st.rerun()
 
-    st.stop() # 合言葉を入れるまでここから下のプログラムは動かさない
+    st.stop() # 使用者名を入れるまでここから下のプログラムは動かさない
 
-# --- 合言葉に基づいた専用のファイル名を設定 ---
+# --- 使用者名に基づいた専用のファイル名を設定 ---
 ROOM = st.session_state.room_key
 LOG_FILE = f"auto_save_log_{ROOM}.csv"
 SET_FILE = f"auto_save_settings_{ROOM}.json"
@@ -158,7 +158,6 @@ def add_a_player():
         st.session_state.new_a_input = ""
 
 def logout_room():
-    # 記録者だった場合のみ、部屋の鍵を開けて（削除して）退出する
     if not st.session_state.read_only:
         lock_file = f"lock_{st.session_state.room_key}.txt"
         if os.path.exists(lock_file):
@@ -166,7 +165,6 @@ def logout_room():
                 locked_by = f.read()
             if locked_by == st.session_state.user_id:
                 os.remove(lock_file)
-    # セッションから部屋情報を消す
     del st.session_state['room_key']
     st.session_state.read_only = False
 
@@ -245,20 +243,19 @@ def load_csv_data():
                 if a_p:
                     st.session_state.r_str_a = ",".join(a_p)
                     st.session_state.act_a = a_p[:5]
-                st.toast(f"✅ 【{ROOM}】ルームにデータを復元しました！")
+                st.toast(f"✅ 【{ROOM}】としてデータを復元しました！")
                 save_state()
             else: st.error("対応していないCSV形式です。")
         except Exception as e: st.error(f"読み込みエラー: {e}")
 
 # --- 2. サイドバー ---
 with st.sidebar:
-    st.success(f"🚪 現在のルーム: **{ROOM}**")
+    st.success(f"👤 現在の使用者: **{ROOM}**")
     mode_str = "👀 見るだけモード" if st.session_state.read_only else "✍️ 記録中（編集可）"
     st.caption(f"現在の権限: {mode_str}")
-    st.button("⬅️ ルームを出る（合言葉変更）", use_container_width=True, on_click=logout_room)
+    st.button("⬅️ 退出する（使用者名変更）", use_container_width=True, on_click=logout_room)
     st.divider()
 
-    # ★見るだけモードの人は設定をイジれないように隠す
     if not st.session_state.read_only:
         st.header("🏆 試合設定")
         st.text_input("大会名", key="tournament_name")
@@ -311,7 +308,6 @@ def record(item, detail="-", res="成功", pts=0, team=None, name=None):
 
 # --- 4. メイン画面の表示制御 ---
 
-# グラフ描画用関数
 def draw_stacked_chart(df, x_col, max_y):
     if df.empty: return
     df_m = df.reset_index().melt(id_vars=x_col, var_name='結果', value_name='回数')
@@ -338,23 +334,18 @@ def draw_simple_bar_chart(s, x_name, max_y, sort_order, color_range=None):
     ).properties(height=200)
     st.altair_chart(chart, use_container_width=True)
 
-# ★ 見るだけモードか、記録者モードかでタブを切り替え
 if st.session_state.read_only:
-    # 観戦者用画面（レポートタブのみ表示）
     st.info("👀 現在は「見るだけモード」です。入力・修正はできません。")
     tab_report, = st.tabs(["📄 ライブ統計レポート"])
     
     with tab_report:
         if st.button("🔄 記録者の最新データを読み込む", use_container_width=True, type="primary"):
-            # 記録者が裏で保存したファイルを読み込み直す！
             if os.path.exists(LOG_FILE):
                 try:
                     df = pd.read_csv(LOG_FILE)
                     df['点数'] = pd.to_numeric(df['点数'], errors='coerce').fillna(0).astype(int)
                     st.session_state.history = df
                 except: pass
-            
-            # 設定ファイルも読み込んでチーム名を最新にする
             if os.path.exists(SET_FILE):
                 try:
                     with open(SET_FILE, "r", encoding="utf-8") as f:
@@ -362,7 +353,6 @@ if st.session_state.read_only:
                     for k, v in s.items():
                         st.session_state[k] = v
                 except: pass
-            
             st.session_state.report_trigger = True
             st.rerun()
 
@@ -372,7 +362,6 @@ if st.session_state.read_only:
             if not st.session_state.report_trigger:
                 st.info("上のボタンを押すと最新のグラフが表示されます。")
 else:
-    # 記録者用画面（フル機能）
     tab_input, tab_report, tab_edit = st.tabs(["✍️ 記録入力", "📄 統計レポート", "🛠 修正"])
 
     with tab_input:
@@ -631,7 +620,6 @@ if st.session_state.report_trigger and not st.session_state.history.empty:
         else: st.caption("データなし")
 
     st.header("3. 個人スタッツ")
-    # ★修正箇所：見るだけモードでも絶対にエラーにならないよう、ここで選手名簿リストを必ず定義します
     all_h = [x.strip() for x in st.session_state.r_str_h.split(",") if x.strip()]
     all_a = [x.strip() for x in st.session_state.r_str_a.split(",") if x.strip()]
 
@@ -664,7 +652,6 @@ if st.session_state.report_trigger and not st.session_state.history.empty:
     st.header("4. 詳細ログ")
     st.dataframe(st.session_state.history.iloc[::-1], use_container_width=True)
     
-    # 観戦者もダウンロード可能
     csv_stats = pd.concat([h_df, a_df], ignore_index=True).to_csv(index=False).encode('utf_8_sig')
     st.download_button("📊 統計CSV保存", csv_stats, f"{st.session_state.tournament_name}_stats.csv", "text/csv")
     csv_log = st.session_state.history.to_csv(index=False).encode('utf_8_sig')
