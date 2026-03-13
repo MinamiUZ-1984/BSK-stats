@@ -8,7 +8,7 @@ import altair as alt
 import uuid
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V15.0", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V15.1", layout="centered")
 
 # --- 0. CSS注入 ---
 st.markdown("""
@@ -269,6 +269,7 @@ with st.sidebar:
         st.button("＋追加＆出場", key="add_h", use_container_width=True, on_click=add_h_player)
         with st.expander(f"👥 {st.session_state.home_name} 名簿を手動編集"):
             st.text_area("全背番号 (カンマ区切り)", key="r_str_h")
+        
         all_h = [x.strip() for x in st.session_state.r_str_h.split(",") if x.strip()]
         valid_act_h = [x for x in st.session_state.act_h if x in all_h]
         if st.session_state.act_h != valid_act_h: st.session_state.act_h = valid_act_h
@@ -283,6 +284,7 @@ with st.sidebar:
         st.button("＋追加＆出場", key="add_a", use_container_width=True, on_click=add_a_player)
         with st.expander(f"👥 {st.session_state.away_name} 名簿を手動編集"):
             st.text_area("全背番号 (カンマ区切り)", key="r_str_a")
+        
         all_a = [x.strip() for x in st.session_state.r_str_a.split(",") if x.strip()]
         valid_act_a = [x for x in st.session_state.act_a if x in all_a]
         if st.session_state.act_a != valid_act_a: st.session_state.act_a = valid_act_a
@@ -351,6 +353,16 @@ if st.session_state.read_only:
                     df['点数'] = pd.to_numeric(df['点数'], errors='coerce').fillna(0).astype(int)
                     st.session_state.history = df
                 except: pass
+            
+            # 設定ファイルも読み込んでチーム名を最新にする
+            if os.path.exists(SET_FILE):
+                try:
+                    with open(SET_FILE, "r", encoding="utf-8") as f:
+                        s = json.load(f)
+                    for k, v in s.items():
+                        st.session_state[k] = v
+                except: pass
+            
             st.session_state.report_trigger = True
             st.rerun()
 
@@ -619,6 +631,10 @@ if st.session_state.report_trigger and not st.session_state.history.empty:
         else: st.caption("データなし")
 
     st.header("3. 個人スタッツ")
+    # ★修正箇所：見るだけモードでも絶対にエラーにならないよう、ここで選手名簿リストを必ず定義します
+    all_h = [x.strip() for x in st.session_state.r_str_h.split(",") if x.strip()]
+    all_a = [x.strip() for x in st.session_state.r_str_a.split(",") if x.strip()]
+
     def get_stats_df(t_name, p_list_all):
         df = st.session_state.history[st.session_state.history['チーム'] == t_name]
         rows = []
