@@ -8,7 +8,7 @@ import altair as alt
 import uuid
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V18.0", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V18.1", layout="centered")
 
 # --- 0. CSS注入（ボタン配置をギュッと詰める） ---
 st.markdown("""
@@ -25,6 +25,7 @@ st.markdown("""
     .advice-good { color: #27ae60; font-weight: bold; }
     .advice-bad { color: #c0392b; font-weight: bold; }
     .area-label { text-align: center; font-size: 10px; font-weight: bold; color: #555; margin-bottom: 2px; line-height: 1.0; }
+    .zone-header { font-size: 12px; font-weight: bold; color: #e67e22; border-bottom: 1px solid #e67e22; margin-top: 10px; margin-bottom: 5px; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -268,9 +269,9 @@ def record(item, detail="-", res="成功", pts=0, team=None, name=None):
     new_id = st.session_state.history['id'].max() + 1 if not st.session_state.history.empty else 1
     new_row = pd.DataFrame([{'id': new_id, 'Q': st.session_state.current_q, 'チーム': t_name, '名前': p_name, '項目': item, '詳細': detail, '結果': res, '点数': pts}])
     st.session_state.history = pd.concat([st.session_state.history, new_row], ignore_index=True)
-    st.toast(f"記録完了")
+    st.session_state.mode = "選手選択"; st.toast(f"記録完了")
 
-# --- ★新規：合体ボタン描画用関数（コート風）★ ---
+# --- 合体ボタン描画用関数 ---
 def draw_area_buttons(area_name, key_prefix, item_type):
     st.markdown(f"<div class='area-label'>{area_name}</div>", unsafe_allow_html=True)
     pts = 2 if item_type == "2P" else 3
@@ -280,7 +281,6 @@ def draw_area_buttons(area_name, key_prefix, item_type):
         safe_rerun()
     if st.button("❌", key=f"{key_prefix}_x", use_container_width=True):
         record(item_type, detail=area_name, res="失敗", pts=0)
-        # ★ 4案：外れたら自動でリバウンド画面へ！
         st.session_state.mode = "リバウンド選択"
         safe_rerun()
 
@@ -411,6 +411,8 @@ def draw_report_body():
         for c in ['成功', '失敗']:
             if c not in stats.columns: stats[c] = 0
         return stats[['成功', '失敗']].reindex(areas_order, fill_value=0)
+    
+    # ★ グラフ側の並び順も「ゴール下 → レイアップ → ミドル」に変更
     areas_order = ["左下", "中下", "右下", "左レ", "中レ", "右レ", "左角", "左45", "中", "右45", "右角"] if area_target == "2P" else ["左角", "左45", "中", "右45", "右角"]
     a_stats_h = get_area_stats(df_h_graph, area_target, areas_order); a_stats_a = get_area_stats(df_a_graph, area_target, areas_order)
     max_y_area = max(a_stats_h.sum(axis=1).max(), a_stats_a.sum(axis=1).max())
@@ -559,7 +561,7 @@ else:
                 c = st.columns(3)
                 if c[0].button("2P", use_container_width=True, type="primary"): st.session_state.tmp['item']="2P"; st.session_state.mode="エリア＆結果選択"; safe_rerun()
                 if c[1].button("3P", use_container_width=True, type="primary"): st.session_state.tmp['item']="3P"; st.session_state.mode="エリア＆結果選択"; safe_rerun()
-                if c[2].button("FT", use_container_width=True): st.session_state.tmp['item']="FT"; st.session_state.mode="結果選択"; safe_rerun() # FTはそのまま
+                if c[2].button("FT", use_container_width=True): st.session_state.tmp['item']="FT"; st.session_state.mode="結果選択"; safe_rerun()
                 o = st.columns(3)
                 with o[0]:
                     if st.button("OR", use_container_width=True): record("OR"); safe_rerun()
@@ -575,19 +577,19 @@ else:
                     if to_cols[i].button(val, use_container_width=True): record("TO", val); safe_rerun()
                 if st.button("キャンセル", use_container_width=True): st.session_state.mode="選手選択"; safe_rerun()
                 
-            # ★新規：1案と3案の複合（コート風配置＆合体）★
             elif st.session_state.mode == "エリア＆結果選択":
                 it = st.session_state.tmp.get('item', '2P')
                 st.write(f"🎯 {it} エリア＆結果")
                 
                 if it == "2P":
-                    # 上段（3エリア）
+                    # ★修正：ゴール下 → レイアップ → ミドルの順に配置＆見出し追加
+                    st.markdown("<div class='zone-header'>🔻 ゴール下（ペイント内）</div>", unsafe_allow_html=True)
                     r1 = st.columns(5)
-                    with r1[1]: draw_area_buttons("左45", "2p_l45", "2P")
-                    with r1[2]: draw_area_buttons("中", "2p_c", "2P")
-                    with r1[3]: draw_area_buttons("右45", "2p_r45", "2P")
+                    with r1[1]: draw_area_buttons("左下", "2p_lbl", "2P")
+                    with r1[2]: draw_area_buttons("中下", "2p_cbl", "2P")
+                    with r1[3]: draw_area_buttons("右下", "2p_rbl", "2P")
                     
-                    # 中段（5エリア）
+                    st.markdown("<div class='zone-header'>🔻 レイアップ（ペイント外周）</div>", unsafe_allow_html=True)
                     r2 = st.columns(5)
                     with r2[0]: draw_area_buttons("左角", "2p_lcor", "2P")
                     with r2[1]: draw_area_buttons("左レ", "2p_ll", "2P")
@@ -595,12 +597,13 @@ else:
                     with r2[3]: draw_area_buttons("右レ", "2p_rl", "2P")
                     with r2[4]: draw_area_buttons("右角", "2p_rcor", "2P")
 
-                    # 下段 ペイント内（3エリア）
+                    st.markdown("<div class='zone-header'>🔻 ミドル（外角）</div>", unsafe_allow_html=True)
                     r3 = st.columns(5)
-                    with r3[1]: draw_area_buttons("左下", "2p_lbl", "2P")
-                    with r3[2]: draw_area_buttons("中下", "2p_cbl", "2P")
-                    with r3[3]: draw_area_buttons("右下", "2p_rbl", "2P")
-                else: # 3P
+                    with r3[1]: draw_area_buttons("左45", "2p_l45", "2P")
+                    with r3[2]: draw_area_buttons("中", "2p_c", "2P")
+                    with r3[3]: draw_area_buttons("右45", "2p_r45", "2P")
+                else: 
+                    # 3P
                     st.info("外周エリアを選択")
                     r1 = st.columns(5)
                     with r1[1]: draw_area_buttons("左45", "3p_l45", "3P")
@@ -621,7 +624,7 @@ else:
                     safe_rerun()
                 if sc[1].button("MISS", use_container_width=True): 
                     record(item, detail=st.session_state.tmp.get('area','-'), res="失敗", pts=0)
-                    st.session_state.mode = "リバウンド選択" # FTも外れたらリバウンドへ
+                    st.session_state.mode = "リバウンド選択"
                     safe_rerun()
                 if st.button("戻る", use_container_width=True): st.session_state.mode="項目選択"; safe_rerun()
 
@@ -640,7 +643,6 @@ else:
                 st.divider()
                 if st.button("❌ アシストなし", use_container_width=True): st.session_state.mode = "選手選択"; safe_rerun()
 
-            # ★新規：4案 ミスからの自動リバウンド連携★
             elif st.session_state.mode == "リバウンド選択":
                 shooter_team = st.session_state.tmp.get('team')
                 st.write(f"🗑️ シュートミス！ 誰がリバウンドを取った？")
@@ -649,7 +651,6 @@ else:
                 reb_h_cols = st.columns(len(st.session_state.act_h))
                 for i, p_num in enumerate(st.session_state.act_h):
                     if reb_h_cols[i].button(p_num, key=f"reb_h_{p_num}", use_container_width=True):
-                        # シュート打ったチームと同じならOR、違うならDR
                         reb_type = "OR" if st.session_state.home_name == shooter_team else "DR"
                         record(reb_type, team=st.session_state.home_name, name=f"{p_num}番")
                         safe_rerun()
