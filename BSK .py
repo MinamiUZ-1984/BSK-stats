@@ -8,7 +8,7 @@ import altair as alt
 import uuid
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V18.3", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V18.4", layout="centered")
 
 # --- 0. CSS注入（被りバグを修正し、コート風のデザインを追加） ---
 st.markdown("""
@@ -17,7 +17,6 @@ st.markdown("""
     [data-testid="stHorizontalBlock"] { display: flex !important; flex-direction: row !important; width: 100% !important; gap: 4px !important; }
     [data-testid="stHorizontalBlock"] > div { flex: 1 1 0% !important; min-width: 0 !important; }
     
-    /* 🚨 修正：ボタンの被りを防ぐため margin-bottom のマイナス指定を削除しました 🚨 */
     .stButton > button { width: 100% !important; padding: 4px 0px !important; font-size: 14px !important; font-weight: bold !important; min-height: 40px !important; margin-bottom: 2px !important; }
     [data-testid="stVerticalBlock"] { gap: 0.2rem !important; }
     
@@ -279,7 +278,7 @@ def record(item, detail="-", res="成功", pts=0, team=None, name=None):
 # --- ★被り防止用エリアボタン描画★ ---
 def draw_zone(col, area_name, key_prefix, item_type):
     with col:
-        # エリアのラベルをテキストで表示し、その下に⭕と❌のボタンを配置
+        # ボタンの上にエリア名をはっきりと別枠で表示
         st.markdown(f"<div class='area-label'>{area_name}</div>", unsafe_allow_html=True)
         pts = 2 if item_type == "2P" else 3
         if st.button("⭕", key=f"{key_prefix}_o", type="primary", use_container_width=True):
@@ -585,12 +584,29 @@ else:
                 
             elif st.session_state.mode == "エリア＆結果選択":
                 it = st.session_state.tmp.get('item', '2P')
-                st.write(f"🎯 {it} エリア＆結果（コート見立て）")
+                st.write(f"🎯 {it} エリア＆結果（記録席からの視点）")
                 
                 if it == "2P":
-                    # 🏀★完全に下から上（ゴールが下）になるよう、プログラムの描画順を変更しました★🏀
+                    # 🏀★完全に「センターコートからリングを見る視点」に変更しました★🏀
                     
-                    # --- 1. ミドル（一番遠いので画面上部） ---
+                    # --- 1. リングの図（一番奥＝画面上部） ---
+                    st.markdown("<div style='text-align:center; font-size:40px; margin-top:-10px; margin-bottom:10px;'>🗑️🏀</div>", unsafe_allow_html=True)
+
+                    # --- 2. ゴール下（リングに一番近い） ---
+                    st.markdown("<div class='court-zone'>【 ゴール下 】</div>", unsafe_allow_html=True)
+                    r1 = st.columns([1.5, 2, 2, 2, 1.5])
+                    draw_zone(r1[1], "左下", "2p_lbl", "2P")
+                    draw_zone(r1[2], "中下", "2p_cbl", "2P")
+                    draw_zone(r1[3], "右下", "2p_rbl", "2P")
+
+                    # --- 3. レイアップ（中間の距離） ---
+                    st.markdown("<div class='court-zone'>【 レイアップ 】</div>", unsafe_allow_html=True)
+                    r2 = st.columns([1, 2, 2, 2, 1])
+                    draw_zone(r2[1], "左レ", "2p_ll", "2P")
+                    draw_zone(r2[2], "中レ", "2p_cl", "2P")
+                    draw_zone(r2[3], "右レ", "2p_rl", "2P")
+
+                    # --- 4. ミドル（一番手前＝画面下部） ---
                     st.markdown("<div class='court-zone'>【 ミドル 】</div>", unsafe_allow_html=True)
                     r3 = st.columns(5)
                     draw_zone(r3[0], "左角", "2p_lcor", "2P")
@@ -599,25 +615,10 @@ else:
                     draw_zone(r3[3], "右45", "2p_r45", "2P")
                     draw_zone(r3[4], "右角", "2p_rcor", "2P")
 
-                    # --- 2. レイアップ（中間の距離） ---
-                    st.markdown("<div class='court-zone'>【 レイアップ 】</div>", unsafe_allow_html=True)
-                    r2 = st.columns([1, 2, 2, 2, 1])
-                    draw_zone(r2[1], "左レ", "2p_ll", "2P")
-                    draw_zone(r2[2], "中レ", "2p_cl", "2P")
-                    draw_zone(r2[3], "右レ", "2p_rl", "2P")
-
-                    # --- 3. ゴール下（一番近いので画面下部） ---
-                    st.markdown("<div class='court-zone'>【 ゴール下 】</div>", unsafe_allow_html=True)
-                    r1 = st.columns([1.5, 2, 2, 2, 1.5])
-                    draw_zone(r1[1], "左下", "2p_lbl", "2P")
-                    draw_zone(r1[2], "中下", "2p_cbl", "2P")
-                    draw_zone(r1[3], "右下", "2p_rbl", "2P")
-
-                    # --- 4. リングの図（一番下に配置してコート感を演出！） ---
-                    st.markdown("<div style='text-align:center; font-size:40px; margin-top:-5px;'>🗑️🏀</div>", unsafe_allow_html=True)
-
                 else: 
                     # 3P
+                    st.markdown("<div style='text-align:center; font-size:40px; margin-top:-10px; margin-bottom:5px;'>🗑️🏀</div>", unsafe_allow_html=True)
+                    st.markdown("<div style='text-align:center; font-size:20px; color:#ccc; margin-bottom:15px;'>🔺 ペイントエリア 🔺</div>", unsafe_allow_html=True)
                     st.markdown("<div class='court-zone'>【 3Pライン 】</div>", unsafe_allow_html=True)
                     r3 = st.columns(5)
                     draw_zone(r3[0], "左角", "3p_lcor", "3P")
@@ -625,8 +626,6 @@ else:
                     draw_zone(r3[2], "中", "3p_c", "3P")
                     draw_zone(r3[3], "右45", "3p_r45", "3P")
                     draw_zone(r3[4], "右角", "3p_rcor", "3P")
-                    
-                    st.markdown("<div style='text-align:center; font-size:25px; color:#ccc; margin-top:20px;'>🔻 ペイントエリア 🔻<br>🗑️🏀</div>", unsafe_allow_html=True)
 
                 st.divider()
                 if st.button("戻る", use_container_width=True): st.session_state.mode="項目選択"; safe_rerun()
