@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components  # ★新規追加（スクロール機能用）
 import pandas as pd
 import io
 import re
@@ -8,30 +9,41 @@ import altair as alt
 import uuid
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V18.4", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V18.5", layout="centered")
 
-# --- 0. CSS注入（被りバグを修正し、コート風のデザインを追加） ---
+# --- 0. CSS注入 ---
 st.markdown("""
     <style>
     .stTabs [data-baseweb="tab-list"] { gap: 10px; }
     [data-testid="stHorizontalBlock"] { display: flex !important; flex-direction: row !important; width: 100% !important; gap: 4px !important; }
     [data-testid="stHorizontalBlock"] > div { flex: 1 1 0% !important; min-width: 0 !important; }
-    
     .stButton > button { width: 100% !important; padding: 4px 0px !important; font-size: 14px !important; font-weight: bold !important; min-height: 40px !important; margin-bottom: 2px !important; }
     [data-testid="stVerticalBlock"] { gap: 0.2rem !important; }
-    
     div[data-testid="stTable"] table { font-size: 9px !important; width: 100% !important; }
     div[data-testid="stTable"] th, div[data-testid="stTable"] td { padding: 2px 1px !important; line-height: 1.1 !important; }
-    
-    /* コート図・ゾーン見出しのデザイン */
     .court-zone { text-align: center; font-size: 12px; font-weight: bold; color: white; background-color: #d35400; padding: 3px 0; border-radius: 4px; margin-top: 15px; margin-bottom: 5px; }
     .area-label { text-align: center; font-size: 11px; font-weight: bold; color: #333; border-bottom: 2px solid #ccc; margin-bottom: 4px; padding-bottom: 2px; }
-    
     .advice-box { background-color: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 5px solid #3498db; margin-bottom: 10px; }
     .advice-good { color: #27ae60; font-weight: bold; }
     .advice-bad { color: #c0392b; font-weight: bold; }
     </style>
 """, unsafe_allow_html=True)
+
+# --- 自動スクロール用関数 ---
+def auto_scroll_to_bottom():
+    components.html(
+        """
+        <script>
+            const main = window.parent.document.querySelector('.main');
+            if (main) {
+                main.scrollTo({top: main.scrollHeight, behavior: 'smooth'});
+            } else {
+                window.parent.scrollTo({top: window.parent.document.body.scrollHeight, behavior: 'smooth'});
+            }
+        </script>
+        """,
+        height=0
+    )
 
 # --- ユーザーIDの発行 ---
 if 'user_id' not in st.session_state:
@@ -275,10 +287,9 @@ def record(item, detail="-", res="成功", pts=0, team=None, name=None):
     st.session_state.history = pd.concat([st.session_state.history, new_row], ignore_index=True)
     st.session_state.mode = "選手選択"; st.toast(f"記録完了")
 
-# --- ★被り防止用エリアボタン描画★ ---
+# --- 被り防止用エリアボタン描画 ---
 def draw_zone(col, area_name, key_prefix, item_type):
     with col:
-        # ボタンの上にエリア名をはっきりと別枠で表示
         st.markdown(f"<div class='area-label'>{area_name}</div>", unsafe_allow_html=True)
         pts = 2 if item_type == "2P" else 3
         if st.button("⭕", key=f"{key_prefix}_o", type="primary", use_container_width=True):
@@ -587,26 +598,19 @@ else:
                 st.write(f"🎯 {it} エリア＆結果（記録席からの視点）")
                 
                 if it == "2P":
-                    # 🏀★完全に「センターコートからリングを見る視点」に変更しました★🏀
-                    
-                    # --- 1. リングの図（一番奥＝画面上部） ---
                     st.markdown("<div style='text-align:center; font-size:40px; margin-top:-10px; margin-bottom:10px;'>🗑️🏀</div>", unsafe_allow_html=True)
-
-                    # --- 2. ゴール下（リングに一番近い） ---
                     st.markdown("<div class='court-zone'>【 ゴール下 】</div>", unsafe_allow_html=True)
                     r1 = st.columns([1.5, 2, 2, 2, 1.5])
                     draw_zone(r1[1], "左下", "2p_lbl", "2P")
                     draw_zone(r1[2], "中下", "2p_cbl", "2P")
                     draw_zone(r1[3], "右下", "2p_rbl", "2P")
 
-                    # --- 3. レイアップ（中間の距離） ---
                     st.markdown("<div class='court-zone'>【 レイアップ 】</div>", unsafe_allow_html=True)
                     r2 = st.columns([1, 2, 2, 2, 1])
                     draw_zone(r2[1], "左レ", "2p_ll", "2P")
                     draw_zone(r2[2], "中レ", "2p_cl", "2P")
                     draw_zone(r2[3], "右レ", "2p_rl", "2P")
 
-                    # --- 4. ミドル（一番手前＝画面下部） ---
                     st.markdown("<div class='court-zone'>【 ミドル 】</div>", unsafe_allow_html=True)
                     r3 = st.columns(5)
                     draw_zone(r3[0], "左角", "2p_lcor", "2P")
@@ -614,9 +618,7 @@ else:
                     draw_zone(r3[2], "中", "2p_c", "2P")
                     draw_zone(r3[3], "右45", "2p_r45", "2P")
                     draw_zone(r3[4], "右角", "2p_rcor", "2P")
-
                 else: 
-                    # 3P
                     st.markdown("<div style='text-align:center; font-size:40px; margin-top:-10px; margin-bottom:5px;'>🗑️🏀</div>", unsafe_allow_html=True)
                     st.markdown("<div style='text-align:center; font-size:20px; color:#ccc; margin-bottom:15px;'>🔺 ペイントエリア 🔺</div>", unsafe_allow_html=True)
                     st.markdown("<div class='court-zone'>【 3Pライン 】</div>", unsafe_allow_html=True)
@@ -629,6 +631,7 @@ else:
 
                 st.divider()
                 if st.button("戻る", use_container_width=True): st.session_state.mode="項目選択"; safe_rerun()
+                auto_scroll_to_bottom() # ★自動スクロール発動！★
 
             elif st.session_state.mode == "結果選択": # FT用
                 st.write(f"🎯 {st.session_state.tmp.get('area', 'FT')}")
@@ -657,6 +660,7 @@ else:
                             safe_rerun()
                 st.divider()
                 if st.button("❌ アシストなし", use_container_width=True): st.session_state.mode = "選手選択"; safe_rerun()
+                auto_scroll_to_bottom() # ★自動スクロール発動！★
 
             elif st.session_state.mode == "リバウンド選択":
                 shooter_team = st.session_state.tmp.get('team')
@@ -680,6 +684,7 @@ else:
                 
                 st.divider()
                 if st.button("⏩ リバウンド記録なし（スキップ）", use_container_width=True): st.session_state.mode = "選手選択"; safe_rerun()
+                auto_scroll_to_bottom() # ★自動スクロール発動！★
 
         st.divider()
         if st.button(f"⏰ {st.session_state.away_name} TOUT", use_container_width=True): record("TOUT", team=st.session_state.away_name, name="TEAM"); safe_rerun()
