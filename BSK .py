@@ -8,24 +8,29 @@ import altair as alt
 import uuid
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V18.2", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V18.3", layout="centered")
 
-# --- 0. CSS注入（ボタン配置をギュッと詰める） ---
+# --- 0. CSS注入（被りバグを修正し、コート風のデザインを追加） ---
 st.markdown("""
     <style>
     .stTabs [data-baseweb="tab-list"] { gap: 10px; }
     [data-testid="stHorizontalBlock"] { display: flex !important; flex-direction: row !important; width: 100% !important; gap: 4px !important; }
     [data-testid="stHorizontalBlock"] > div { flex: 1 1 0% !important; min-width: 0 !important; }
-    /* ボタンの上下の隙間を極限まで減らす */
-    .stButton > button { width: 100% !important; padding: 4px 0px !important; font-size: 14px !important; font-weight: bold !important; min-height: 38px !important; margin-bottom: -15px !important; }
-    [data-testid="stVerticalBlock"] { gap: 0.1rem !important; }
+    
+    /* 🚨 修正：ボタンの被りを防ぐため margin-bottom のマイナス指定を削除しました 🚨 */
+    .stButton > button { width: 100% !important; padding: 4px 0px !important; font-size: 14px !important; font-weight: bold !important; min-height: 40px !important; margin-bottom: 2px !important; }
+    [data-testid="stVerticalBlock"] { gap: 0.2rem !important; }
+    
     div[data-testid="stTable"] table { font-size: 9px !important; width: 100% !important; }
     div[data-testid="stTable"] th, div[data-testid="stTable"] td { padding: 2px 1px !important; line-height: 1.1 !important; }
+    
+    /* コート図・ゾーン見出しのデザイン */
+    .court-zone { text-align: center; font-size: 12px; font-weight: bold; color: white; background-color: #d35400; padding: 3px 0; border-radius: 4px; margin-top: 15px; margin-bottom: 5px; }
+    .area-label { text-align: center; font-size: 11px; font-weight: bold; color: #333; border-bottom: 2px solid #ccc; margin-bottom: 4px; padding-bottom: 2px; }
+    
     .advice-box { background-color: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 5px solid #3498db; margin-bottom: 10px; }
     .advice-good { color: #27ae60; font-weight: bold; }
     .advice-bad { color: #c0392b; font-weight: bold; }
-    /* 被り防止のため、エリア名をボタン内に表示するように変更。CSSでのlabelクラスは廃止 */
-    .zone-header { font-size: 12px; font-weight: bold; color: #e67e22; border-bottom: 1px solid #e67e22; margin-top: 10px; margin-bottom: 5px; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -271,20 +276,20 @@ def record(item, detail="-", res="成功", pts=0, team=None, name=None):
     st.session_state.history = pd.concat([st.session_state.history, new_row], ignore_index=True)
     st.session_state.mode = "選手選択"; st.toast(f"記録完了")
 
-# --- ★修正：合体ボタン描画用関数（被り防止のため、エリア名をボタン内に表示）★ ---
-def draw_area_buttons_simple(area_name, key_prefix, item_type):
-    # CSSでのラベル表示を廃止し、ボタンテキストにエリア名を組み込む
-    # st.markdown(f"<div class='area-label'>{area_name}</div>", unsafe_allow_html=True)
-    pts = 2 if item_type == "2P" else 3
-    # ボタン名を「エリア名 🟢」と「エリア名 ❌」に変更
-    if st.button(f"{area_name} 🟢", key=f"{key_prefix}_o", type="primary", use_container_width=True):
-        record(item_type, detail=area_name, res="成功", pts=pts)
-        st.session_state.mode = "アシスト選択"
-        safe_rerun()
-    if st.button(f"{area_name} ❌", key=f"{key_prefix}_x", use_container_width=True):
-        record(item_type, detail=area_name, res="失敗", pts=0)
-        st.session_state.mode = "リバウンド選択"
-        safe_rerun()
+# --- ★被り防止用エリアボタン描画★ ---
+def draw_zone(col, area_name, key_prefix, item_type):
+    with col:
+        # エリアのラベルをテキストで表示し、その下に⭕と❌のボタンを配置
+        st.markdown(f"<div class='area-label'>{area_name}</div>", unsafe_allow_html=True)
+        pts = 2 if item_type == "2P" else 3
+        if st.button("⭕", key=f"{key_prefix}_o", type="primary", use_container_width=True):
+            record(item_type, detail=area_name, res="成功", pts=pts)
+            st.session_state.mode = "アシスト選択"
+            safe_rerun()
+        if st.button("❌", key=f"{key_prefix}_x", use_container_width=True):
+            record(item_type, detail=area_name, res="失敗", pts=0)
+            st.session_state.mode = "リバウンド選択"
+            safe_rerun()
 
 def draw_stacked_chart(df, x_col, max_y):
     if df.empty: return
@@ -414,7 +419,6 @@ def draw_report_body():
             if c not in stats.columns: stats[c] = 0
         return stats[['成功', '失敗']].reindex(areas_order, fill_value=0)
     
-    # ★ グラフ側の並び順も「ゴール下 → レイアップ → ミドル」に変更
     areas_order = ["左下", "中下", "右下", "左レ", "中レ", "右レ", "左角", "左45", "中", "右45", "右角"] if area_target == "2P" else ["左角", "左45", "中", "右45", "右角"]
     a_stats_h = get_area_stats(df_h_graph, area_target, areas_order); a_stats_a = get_area_stats(df_a_graph, area_target, areas_order)
     max_y_area = max(a_stats_h.sum(axis=1).max(), a_stats_a.sum(axis=1).max())
@@ -581,47 +585,50 @@ else:
                 
             elif st.session_state.mode == "エリア＆結果選択":
                 it = st.session_state.tmp.get('item', '2P')
-                st.write(f"🎯 {it} エリア＆結果")
+                st.write(f"🎯 {it} エリア＆結果（コート見立て）")
                 
                 if it == "2P":
-                    # ★修正：被り防止のため、エリア名をボタン内に表示するように変更★
-                    # ★修正：ゴール下 → レイアップ → ミドルの順に下から上へ配置★
-
-                    # 視覚的な補助としてコート図を追加 
-                    st.markdown("<div class='zone-header'>🔻 コート図（ zones ）</div>", unsafe_allow_html=True)
-                    # ここにハーフコートの図があると分かりやすいです。
-
-                    st.markdown("<div class='zone-header'>🔻 ゴール下（ペイント内）</div>", unsafe_allow_html=True)
-                    r1 = st.columns(3)
-                    with r1[0]: draw_area_buttons_simple("左下", "2p_lbl", "2P")
-                    with r1[1]: draw_area_buttons_simple("中下", "2p_cbl", "2P")
-                    with r1[2]: draw_area_buttons_simple("右下", "2p_rbl", "2P")
+                    # 🏀★完全に下から上（ゴールが下）になるよう、プログラムの描画順を変更しました★🏀
                     
-                    st.markdown("<div class='zone-header'>🔻 レイアップ（ペイント外周）</div>", unsafe_allow_html=True)
-                    r2 = st.columns(3)
-                    with r2[0]: draw_area_buttons_simple("左レ", "2p_ll", "2P")
-                    with r2[1]: draw_area_buttons_simple("中レ", "2p_cl", "2P")
-                    with r2[2]: draw_area_buttons_simple("右レ", "2p_rl", "2P")
-
-                    st.markdown("<div class='zone-header'>🔻 ミドル（外角）</div>", unsafe_allow_html=True)
+                    # --- 1. ミドル（一番遠いので画面上部） ---
+                    st.markdown("<div class='court-zone'>【 ミドル 】</div>", unsafe_allow_html=True)
                     r3 = st.columns(5)
-                    with r3[0]: draw_area_buttons_simple("左角", "2p_lcor", "2P")
-                    with r3[1]: draw_area_buttons_simple("左45", "2p_l45", "2P")
-                    with r3[2]: draw_area_buttons_simple("中", "2p_c", "2P")
-                    with r3[3]: draw_area_buttons_simple("右45", "2p_r45", "2P")
-                    with r3[4]: draw_area_buttons_simple("右角", "2p_rcor", "2P")
+                    draw_zone(r3[0], "左角", "2p_lcor", "2P")
+                    draw_zone(r3[1], "左45", "2p_l45", "2P")
+                    draw_zone(r3[2], "中", "2p_c", "2P")
+                    draw_zone(r3[3], "右45", "2p_r45", "2P")
+                    draw_zone(r3[4], "右角", "2p_rcor", "2P")
+
+                    # --- 2. レイアップ（中間の距離） ---
+                    st.markdown("<div class='court-zone'>【 レイアップ 】</div>", unsafe_allow_html=True)
+                    r2 = st.columns([1, 2, 2, 2, 1])
+                    draw_zone(r2[1], "左レ", "2p_ll", "2P")
+                    draw_zone(r2[2], "中レ", "2p_cl", "2P")
+                    draw_zone(r2[3], "右レ", "2p_rl", "2P")
+
+                    # --- 3. ゴール下（一番近いので画面下部） ---
+                    st.markdown("<div class='court-zone'>【 ゴール下 】</div>", unsafe_allow_html=True)
+                    r1 = st.columns([1.5, 2, 2, 2, 1.5])
+                    draw_zone(r1[1], "左下", "2p_lbl", "2P")
+                    draw_zone(r1[2], "中下", "2p_cbl", "2P")
+                    draw_zone(r1[3], "右下", "2p_rbl", "2P")
+
+                    # --- 4. リングの図（一番下に配置してコート感を演出！） ---
+                    st.markdown("<div style='text-align:center; font-size:40px; margin-top:-5px;'>🗑️🏀</div>", unsafe_allow_html=True)
+
                 else: 
                     # 3P
-                    st.info("外周エリアを選択")
-                    # 3Pもボタン内にエリア名を組み込む
-                    r1 = st.columns(3)
-                    with r1[0]: draw_area_buttons_simple("左45", "3p_l45", "3P")
-                    with r1[1]: draw_area_buttons_simple("中", "3p_c", "3P")
-                    with r1[2]: draw_area_buttons_simple("右45", "3p_r45", "3P")
-                    r2 = st.columns(2)
-                    with r2[0]: draw_area_buttons_simple("左角", "3p_lcor", "3P")
-                    with r2[1]: draw_area_buttons_simple("右角", "3p_rcor", "3P")
+                    st.markdown("<div class='court-zone'>【 3Pライン 】</div>", unsafe_allow_html=True)
+                    r3 = st.columns(5)
+                    draw_zone(r3[0], "左角", "3p_lcor", "3P")
+                    draw_zone(r3[1], "左45", "3p_l45", "3P")
+                    draw_zone(r3[2], "中", "3p_c", "3P")
+                    draw_zone(r3[3], "右45", "3p_r45", "3P")
+                    draw_zone(r3[4], "右角", "3p_rcor", "3P")
+                    
+                    st.markdown("<div style='text-align:center; font-size:25px; color:#ccc; margin-top:20px;'>🔻 ペイントエリア 🔻<br>🗑️🏀</div>", unsafe_allow_html=True)
 
+                st.divider()
                 if st.button("戻る", use_container_width=True): st.session_state.mode="項目選択"; safe_rerun()
 
             elif st.session_state.mode == "結果選択": # FT用
