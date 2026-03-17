@@ -9,7 +9,7 @@ import altair as alt
 import uuid
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V18.7", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V18.8", layout="centered")
 
 # --- 0. CSS注入 ---
 st.markdown("""
@@ -17,19 +17,23 @@ st.markdown("""
     .stTabs [data-baseweb="tab-list"] { gap: 10px; }
     [data-testid="stHorizontalBlock"] { display: flex !important; flex-direction: row !important; width: 100% !important; gap: 4px !important; }
     [data-testid="stHorizontalBlock"] > div { flex: 1 1 0% !important; min-width: 0 !important; }
+    
     .stButton > button { width: 100% !important; padding: 4px 0px !important; font-size: 14px !important; font-weight: bold !important; min-height: 40px !important; margin-bottom: 2px !important; }
     [data-testid="stVerticalBlock"] { gap: 0.2rem !important; }
+    
     div[data-testid="stTable"] table { font-size: 9px !important; width: 100% !important; }
     div[data-testid="stTable"] th, div[data-testid="stTable"] td { padding: 2px 1px !important; line-height: 1.1 !important; }
+    
     .court-zone { text-align: center; font-size: 12px; font-weight: bold; color: white; background-color: #d35400; padding: 3px 0; border-radius: 4px; margin-top: 15px; margin-bottom: 5px; }
-    .area-label { text-align: center; font-size: 11px; font-weight: bold; color: #333; border-bottom: 2px solid #ccc; margin-bottom: 4px; padding-bottom: 2px; }
+    .area-label { text-align: center; font-size: 11px; font-weight: bold; color: #333; border-bottom: 2px solid #ccc; margin-bottom: 2px; padding-bottom: 2px; }
+    
     .advice-box { background-color: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 5px solid #3498db; margin-bottom: 10px; }
     .advice-good { color: #27ae60; font-weight: bold; }
     .advice-bad { color: #c0392b; font-weight: bold; }
     </style>
 """, unsafe_allow_html=True)
 
-# --- ★修正：ターゲットを狙い撃ちする精密スクロール関数 ---
+# --- ★修正：ターゲットを狙い撃ちする精密スクロール（行き過ぎ防止） ---
 def auto_scroll_to_target():
     components.html(
         """
@@ -37,8 +41,18 @@ def auto_scroll_to_target():
             setTimeout(function() {
                 const target = window.parent.document.getElementById('scroll-target');
                 if (target) {
-                    // ターゲットが画面の「中央（center）」にくるようにスクロール
-                    target.scrollIntoView({behavior: 'smooth', block: 'center'});
+                    // 目印を画面の「一番上（start）」に合わせるようスクロール
+                    target.scrollIntoView({behavior: 'smooth', block: 'start'});
+                    
+                    // スマホの上のバーに隠れないよう、少しだけ下に押し戻す（微調整）
+                    setTimeout(function() {
+                        const parent = window.parent;
+                        const containers = parent.document.querySelectorAll('.main, [data-testid="stAppViewContainer"], [data-testid="stMain"]');
+                        containers.forEach(container => {
+                            container.scrollBy({ top: -40, behavior: 'smooth' });
+                        });
+                        parent.scrollBy({ top: -40, behavior: 'smooth' });
+                    }, 200);
                 }
             }, 400); 
         </script>
@@ -288,10 +302,11 @@ def record(item, detail="-", res="成功", pts=0, team=None, name=None):
     st.session_state.history = pd.concat([st.session_state.history, new_row], ignore_index=True)
     st.session_state.mode = "選手選択"; st.toast(f"記録完了")
 
-# --- エリアボタン描画 ---
+# --- ★修正：被り防止のため物理的な隙間(height:8px)を追加したエリアボタン描画★ ---
 def draw_zone(col, area_name, key_prefix, item_type):
     with col:
-        st.markdown(f"<div class='area-label'>{area_name}</div>", unsafe_allow_html=True)
+        # 文字とボタンが被らないよう、透明な隙間（8px）を挟む
+        st.markdown(f"<div class='area-label'>{area_name}</div><div style='height:8px;'></div>", unsafe_allow_html=True)
         pts = 2 if item_type == "2P" else 3
         if st.button("⭕", key=f"{key_prefix}_o", type="primary", use_container_width=True):
             record(item_type, detail=area_name, res="成功", pts=pts)
@@ -595,7 +610,7 @@ else:
                 if st.button("キャンセル", use_container_width=True): st.session_state.mode="選手選択"; safe_rerun()
                 
             elif st.session_state.mode == "エリア＆結果選択":
-                # ★精密スクロールのターゲット（目印）を設置！★
+                # ★精密スクロールのターゲット（目印）★
                 st.markdown("<div id='scroll-target'></div>", unsafe_allow_html=True)
                 
                 it = st.session_state.tmp.get('item', '2P')
