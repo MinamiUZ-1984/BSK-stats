@@ -8,7 +8,7 @@ import altair as alt
 import uuid
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V18.1", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V18.2", layout="centered")
 
 # --- 0. CSS注入（ボタン配置をギュッと詰める） ---
 st.markdown("""
@@ -24,7 +24,7 @@ st.markdown("""
     .advice-box { background-color: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 5px solid #3498db; margin-bottom: 10px; }
     .advice-good { color: #27ae60; font-weight: bold; }
     .advice-bad { color: #c0392b; font-weight: bold; }
-    .area-label { text-align: center; font-size: 10px; font-weight: bold; color: #555; margin-bottom: 2px; line-height: 1.0; }
+    /* 被り防止のため、エリア名をボタン内に表示するように変更。CSSでのlabelクラスは廃止 */
     .zone-header { font-size: 12px; font-weight: bold; color: #e67e22; border-bottom: 1px solid #e67e22; margin-top: 10px; margin-bottom: 5px; }
     </style>
 """, unsafe_allow_html=True)
@@ -271,15 +271,17 @@ def record(item, detail="-", res="成功", pts=0, team=None, name=None):
     st.session_state.history = pd.concat([st.session_state.history, new_row], ignore_index=True)
     st.session_state.mode = "選手選択"; st.toast(f"記録完了")
 
-# --- 合体ボタン描画用関数 ---
-def draw_area_buttons(area_name, key_prefix, item_type):
-    st.markdown(f"<div class='area-label'>{area_name}</div>", unsafe_allow_html=True)
+# --- ★修正：合体ボタン描画用関数（被り防止のため、エリア名をボタン内に表示）★ ---
+def draw_area_buttons_simple(area_name, key_prefix, item_type):
+    # CSSでのラベル表示を廃止し、ボタンテキストにエリア名を組み込む
+    # st.markdown(f"<div class='area-label'>{area_name}</div>", unsafe_allow_html=True)
     pts = 2 if item_type == "2P" else 3
-    if st.button("⭕️", key=f"{key_prefix}_o", type="primary", use_container_width=True):
+    # ボタン名を「エリア名 🟢」と「エリア名 ❌」に変更
+    if st.button(f"{area_name} 🟢", key=f"{key_prefix}_o", type="primary", use_container_width=True):
         record(item_type, detail=area_name, res="成功", pts=pts)
         st.session_state.mode = "アシスト選択"
         safe_rerun()
-    if st.button("❌", key=f"{key_prefix}_x", use_container_width=True):
+    if st.button(f"{area_name} ❌", key=f"{key_prefix}_x", use_container_width=True):
         record(item_type, detail=area_name, res="失敗", pts=0)
         st.session_state.mode = "リバウンド選択"
         safe_rerun()
@@ -582,36 +584,43 @@ else:
                 st.write(f"🎯 {it} エリア＆結果")
                 
                 if it == "2P":
-                    # ★修正：ゴール下 → レイアップ → ミドルの順に配置＆見出し追加
+                    # ★修正：被り防止のため、エリア名をボタン内に表示するように変更★
+                    # ★修正：ゴール下 → レイアップ → ミドルの順に下から上へ配置★
+
+                    # 視覚的な補助としてコート図を追加 
+                    st.markdown("<div class='zone-header'>🔻 コート図（ zones ）</div>", unsafe_allow_html=True)
+                    # ここにハーフコートの図があると分かりやすいです。
+
                     st.markdown("<div class='zone-header'>🔻 ゴール下（ペイント内）</div>", unsafe_allow_html=True)
-                    r1 = st.columns(5)
-                    with r1[1]: draw_area_buttons("左下", "2p_lbl", "2P")
-                    with r1[2]: draw_area_buttons("中下", "2p_cbl", "2P")
-                    with r1[3]: draw_area_buttons("右下", "2p_rbl", "2P")
+                    r1 = st.columns(3)
+                    with r1[0]: draw_area_buttons_simple("左下", "2p_lbl", "2P")
+                    with r1[1]: draw_area_buttons_simple("中下", "2p_cbl", "2P")
+                    with r1[2]: draw_area_buttons_simple("右下", "2p_rbl", "2P")
                     
                     st.markdown("<div class='zone-header'>🔻 レイアップ（ペイント外周）</div>", unsafe_allow_html=True)
-                    r2 = st.columns(5)
-                    with r2[0]: draw_area_buttons("左角", "2p_lcor", "2P")
-                    with r2[1]: draw_area_buttons("左レ", "2p_ll", "2P")
-                    with r2[2]: draw_area_buttons("中レ", "2p_cl", "2P")
-                    with r2[3]: draw_area_buttons("右レ", "2p_rl", "2P")
-                    with r2[4]: draw_area_buttons("右角", "2p_rcor", "2P")
+                    r2 = st.columns(3)
+                    with r2[0]: draw_area_buttons_simple("左レ", "2p_ll", "2P")
+                    with r2[1]: draw_area_buttons_simple("中レ", "2p_cl", "2P")
+                    with r2[2]: draw_area_buttons_simple("右レ", "2p_rl", "2P")
 
                     st.markdown("<div class='zone-header'>🔻 ミドル（外角）</div>", unsafe_allow_html=True)
                     r3 = st.columns(5)
-                    with r3[1]: draw_area_buttons("左45", "2p_l45", "2P")
-                    with r3[2]: draw_area_buttons("中", "2p_c", "2P")
-                    with r3[3]: draw_area_buttons("右45", "2p_r45", "2P")
+                    with r3[0]: draw_area_buttons_simple("左角", "2p_lcor", "2P")
+                    with r3[1]: draw_area_buttons_simple("左45", "2p_l45", "2P")
+                    with r3[2]: draw_area_buttons_simple("中", "2p_c", "2P")
+                    with r3[3]: draw_area_buttons_simple("右45", "2p_r45", "2P")
+                    with r3[4]: draw_area_buttons_simple("右角", "2p_rcor", "2P")
                 else: 
                     # 3P
                     st.info("外周エリアを選択")
-                    r1 = st.columns(5)
-                    with r1[1]: draw_area_buttons("左45", "3p_l45", "3P")
-                    with r1[2]: draw_area_buttons("中", "3p_c", "3P")
-                    with r1[3]: draw_area_buttons("右45", "3p_r45", "3P")
-                    r2 = st.columns(5)
-                    with r2[0]: draw_area_buttons("左角", "3p_lcor", "3P")
-                    with r2[4]: draw_area_buttons("右角", "3p_rcor", "3P")
+                    # 3Pもボタン内にエリア名を組み込む
+                    r1 = st.columns(3)
+                    with r1[0]: draw_area_buttons_simple("左45", "3p_l45", "3P")
+                    with r1[1]: draw_area_buttons_simple("中", "3p_c", "3P")
+                    with r1[2]: draw_area_buttons_simple("右45", "3p_r45", "3P")
+                    r2 = st.columns(2)
+                    with r2[0]: draw_area_buttons_simple("左角", "3p_lcor", "3P")
+                    with r2[1]: draw_area_buttons_simple("右角", "3p_rcor", "3P")
 
                 if st.button("戻る", use_container_width=True): st.session_state.mode="項目選択"; safe_rerun()
 
