@@ -8,7 +8,7 @@ import altair as alt
 import uuid
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V17.0", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V17.1", layout="centered")
 
 # --- 0. CSS注入 ---
 st.markdown("""
@@ -184,11 +184,20 @@ if 'mode' not in st.session_state: st.session_state.mode = "選手選択"
 if 'tmp' not in st.session_state: st.session_state.tmp = {}
 if 'report_trigger' not in st.session_state: st.session_state.report_trigger = False
 
+# --- ★修正：CSV読み込みエラー対策と自動表示 ---
 def load_csv_data():
     if st.session_state.uploaded_file is not None:
         try:
             file_bytes = st.session_state.uploaded_file.getvalue()
-            df = pd.read_csv(io.BytesIO(file_bytes))
+            # エクセル由来の特殊文字(BOM)対策
+            try:
+                df = pd.read_csv(io.BytesIO(file_bytes), encoding='utf_8_sig')
+            except:
+                df = pd.read_csv(io.BytesIO(file_bytes))
+            
+            # カラム名に見えない文字が含まれていたら綺麗に掃除する
+            df.columns = [str(c).replace('\ufeff', '').strip() for c in df.columns]
+
             if set(['id', 'Q', 'チーム', '名前', '項目', '詳細', '結果', '点数']).issubset(df.columns):
                 df['チーム'] = df['チーム'].astype(str).str.strip()
                 df['名前'] = df['名前'].astype(str).str.strip()
@@ -226,10 +235,15 @@ def load_csv_data():
                 if a_p:
                     st.session_state.r_str_a = ",".join(a_p)
                     st.session_state.act_a = a_p[:5]
-                st.toast(f"✅ 【{ROOM}】としてデータを復元しました！")
+                
+                # ★読み込み成功時、自動でレポートタブを表示するようにフラグON！
+                st.session_state.report_trigger = True
                 save_state()
-            else: st.error("対応していないCSV形式です。")
-        except Exception as e: st.error(f"読み込みエラー: {e}")
+                st.toast(f"✅ データを完全に復元しました！")
+            else: 
+                st.error("対応していないCSV形式です。")
+        except Exception as e: 
+            st.error(f"読み込みエラー: {e}")
 
 # --- サイドバー ---
 with st.sidebar:
@@ -289,33 +303,37 @@ def record(item, detail="-", res="成功", pts=0, team=None, name=None):
     st.session_state.history = pd.concat([st.session_state.history, new_row], ignore_index=True)
     st.session_state.mode = "選手選択"; st.toast(f"記録完了")
 
-# --- ★進化したグラフ描画関数★ ---
+# --- ★グラフ描画用関数（数値を絶対表示させる頑丈な仕様に変更）★ ---
 def draw_stacked_chart(df, x_col, max_y):
     if df.empty: return
     df_m = df.reset_index().melt(id_vars=x_col, var_name='結果', value_name='回数')
     
-    # 棒グラフ本体
+    # メインの棒グラフ
     bars = alt.Chart(df_m).mark_bar().encode(
         x=alt.X(f"{x_col}:N", sort=None, title='', axis=alt.Axis(labelAngle=-45, labelOverlap=False)),
         y=alt.Y('回数:Q', scale=alt.Scale(domain=[0, max_y]), title=''),
         color=alt.Color('結果:N', scale=alt.Scale(domain=['成功', '失敗'], range=['#00b050', '#ff4b4b']), legend=alt.Legend(title="", orient="bottom")),
+        order=alt.Order('結果:N', sort='ascending'),
         tooltip=[f"{x_col}:N", '結果:N', '回数:Q']
     )
     
-    # 棒グラフの中の数字（成功数・失敗数）
-    text = alt.Chart(df_m).mark_text(dx=0, dy=12, color='white', baseline='top', fontWeight='bold', fontSize=11).encode(
+    # 棒グラフの中の数字（エラー回避のため、事前に「0以上」のデータだけを抽出）
+    df_text = df_m[df_m['回数'] > 0].copy()
+    text = alt.Chart(df_text).mark_text(dx=0, dy=12, color='white', baseline='top', fontWeight='bold', fontSize=11).encode(
         x=alt.X(f"{x_col}:N", sort=None),
         y=alt.Y('回数:Q', stack='zero'),
         detail='結果:N',
-        text=alt.condition(alt.datum['回数'] > 0, alt.Text('回数:Q'), alt.value(''))
+        order=alt.Order('結果:N', sort='ascending'),
+        text='回数:Q'
     )
     
-    # 棒グラフの上の数字（Total）
+    # 棒グラフの一番上の合計（Total）の数字
     df_total = df_m.groupby(x_col, as_index=False)['回数'].sum()
-    total_text = alt.Chart(df_total).mark_text(dy=-8, color='black', fontWeight='bold', fontSize=12).encode(
+    df_total_text = df_total[df_total['回数'] > 0].copy()
+    total_text = alt.Chart(df_total_text).mark_text(dy=-8, color='black', fontWeight='bold', fontSize=12).encode(
         x=alt.X(f"{x_col}:N", sort=None),
         y=alt.Y('回数:Q'),
-        text=alt.condition(alt.datum['回数'] > 0, alt.Text('回数:Q'), alt.value(''))
+        text='回数:Q'
     )
     
     chart = alt.layer(bars, text, total_text).properties(height=250)
@@ -330,7 +348,6 @@ def draw_simple_bar_chart(s, x_name, max_y, sort_order, color_range=None):
     if color_range:
         color_encode = alt.Color(f'{x_name}:N', scale=alt.Scale(domain=sort_order, range=color_range), legend=None)
         
-    # 棒グラフ本体
     bars = alt.Chart(df).mark_bar().encode(
         x=alt.X(f"{x_name}:N", sort=sort_order, title='', axis=alt.Axis(labelAngle=0, labelOverlap=False)),
         y=alt.Y('回数:Q', scale=alt.Scale(domain=[0, max_y]), title=''),
@@ -338,11 +355,12 @@ def draw_simple_bar_chart(s, x_name, max_y, sort_order, color_range=None):
         tooltip=[f"{x_name}:N", '回数:Q']
     )
     
-    # 棒グラフの上の数字
-    text = alt.Chart(df).mark_text(dy=-8, color='black', fontWeight='bold', fontSize=12).encode(
+    # 上に載せる数字
+    df_text = df[df['回数'] > 0].copy()
+    text = alt.Chart(df_text).mark_text(dy=-8, color='black', fontWeight='bold', fontSize=12).encode(
         x=alt.X(f"{x_name}:N", sort=sort_order),
         y=alt.Y('回数:Q'),
-        text=alt.condition(alt.datum['回数'] > 0, alt.Text('回数:Q'), alt.value(''))
+        text='回数:Q'
     )
     
     chart = alt.layer(bars, text).properties(height=200)
@@ -452,7 +470,7 @@ def draw_report_body():
     s_stats_h = get_shot_stats(df_h_graph)
     s_stats_a = get_shot_stats(df_a_graph)
     
-    # ★ テキストがはみ出さないようにY軸の最大値に15%の余裕を持たせる
+    # グラフの上に数字が出るため、最大値（Y軸）に少しゆとりを持たせます
     max_y_overall = max(s_stats_h.sum(axis=1).max(), s_stats_a.sum(axis=1).max())
     max_y_overall = int(max_y_overall * 1.15) + 1 if max_y_overall > 0 else 5
     
@@ -479,6 +497,7 @@ def draw_report_body():
     areas_order = ["左下", "中下", "右下", "左レ", "中レ", "右レ", "左角", "左45", "中", "右45", "右角"] if area_target == "2P" else ["左角", "左45", "中", "右45", "右角"]
     a_stats_h = get_area_stats(df_h_graph, area_target, areas_order)
     a_stats_a = get_area_stats(df_a_graph, area_target, areas_order)
+    
     max_y_area = max(a_stats_h.sum(axis=1).max(), a_stats_a.sum(axis=1).max())
     max_y_area = int(max_y_area * 1.15) + 1 if max_y_area > 0 else 5
     
@@ -500,11 +519,12 @@ def draw_report_body():
         for c in ['OR', 'DR']:
             if c not in stats.index: stats[c] = 0
         s = stats[['OR', 'DR']]
-        s['Total'] = s.sum() # ★ 合計(Total)を追加
+        s['Total'] = s.sum() # ★ 合計(Total)の棒を追加
         return s
         
     r_stats_h = get_reb_stats(df_h_graph)
     r_stats_a = get_reb_stats(df_a_graph)
+    
     max_y_reb = max(r_stats_h.max(), r_stats_a.max())
     max_y_reb = int(max_y_reb * 1.15) + 1 if max_y_reb > 0 else 5
     
@@ -527,11 +547,12 @@ def draw_report_body():
         for c in to_cols:
             if c not in stats.index: stats[c] = 0
         s = stats[to_cols]
-        s['Total'] = s.sum() # ★ 合計(Total)を追加
+        s['Total'] = s.sum() # ★ 合計(Total)の棒を追加
         return s
         
     to_stats_h = get_to_stats(df_h_graph)
     to_stats_a = get_to_stats(df_a_graph)
+    
     max_y_to = max(to_stats_h.max(), to_stats_a.max())
     max_y_to = int(max_y_to * 1.15) + 1 if max_y_to > 0 else 5
     
