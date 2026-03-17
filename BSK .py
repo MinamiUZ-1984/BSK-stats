@@ -1,5 +1,5 @@
 import streamlit as st
-import streamlit.components.v1 as components  # ★新規追加（スクロール機能用）
+import streamlit.components.v1 as components
 import pandas as pd
 import io
 import re
@@ -9,7 +9,7 @@ import altair as alt
 import uuid
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V18.5", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V18.6", layout="centered")
 
 # --- 0. CSS注入 ---
 st.markdown("""
@@ -29,17 +29,21 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 自動スクロール用関数 ---
+# --- ★修正：自動スクロール用関数（タイマー遅延＆全対応版） ---
 def auto_scroll_to_bottom():
     components.html(
         """
         <script>
-            const main = window.parent.document.querySelector('.main');
-            if (main) {
-                main.scrollTo({top: main.scrollHeight, behavior: 'smooth'});
-            } else {
-                window.parent.scrollTo({top: window.parent.document.body.scrollHeight, behavior: 'smooth'});
-            }
+            // 画面が描画されるのを少し待ってから（0.4秒後）スクロールを発動！
+            setTimeout(function() {
+                const parent = window.parent;
+                // スマホやPCなど、環境によって異なるスクロールコンテナをすべて狙い撃ち
+                const containers = parent.document.querySelectorAll('.main, [data-testid="stAppViewContainer"], [data-testid="stMain"]');
+                containers.forEach(container => {
+                    container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+                });
+                parent.scrollTo({ top: parent.document.body.scrollHeight, behavior: 'smooth' });
+            }, 400); 
         </script>
         """,
         height=0
@@ -287,7 +291,7 @@ def record(item, detail="-", res="成功", pts=0, team=None, name=None):
     st.session_state.history = pd.concat([st.session_state.history, new_row], ignore_index=True)
     st.session_state.mode = "選手選択"; st.toast(f"記録完了")
 
-# --- 被り防止用エリアボタン描画 ---
+# --- エリアボタン描画 ---
 def draw_zone(col, area_name, key_prefix, item_type):
     with col:
         st.markdown(f"<div class='area-label'>{area_name}</div>", unsafe_allow_html=True)
@@ -631,7 +635,7 @@ else:
 
                 st.divider()
                 if st.button("戻る", use_container_width=True): st.session_state.mode="項目選択"; safe_rerun()
-                auto_scroll_to_bottom() # ★自動スクロール発動！★
+                auto_scroll_to_bottom() 
 
             elif st.session_state.mode == "結果選択": # FT用
                 st.write(f"🎯 {st.session_state.tmp.get('area', 'FT')}")
@@ -660,7 +664,7 @@ else:
                             safe_rerun()
                 st.divider()
                 if st.button("❌ アシストなし", use_container_width=True): st.session_state.mode = "選手選択"; safe_rerun()
-                auto_scroll_to_bottom() # ★自動スクロール発動！★
+                auto_scroll_to_bottom() 
 
             elif st.session_state.mode == "リバウンド選択":
                 shooter_team = st.session_state.tmp.get('team')
@@ -684,7 +688,7 @@ else:
                 
                 st.divider()
                 if st.button("⏩ リバウンド記録なし（スキップ）", use_container_width=True): st.session_state.mode = "選手選択"; safe_rerun()
-                auto_scroll_to_bottom() # ★自動スクロール発動！★
+                auto_scroll_to_bottom() 
 
         st.divider()
         if st.button(f"⏰ {st.session_state.away_name} TOUT", use_container_width=True): record("TOUT", team=st.session_state.away_name, name="TEAM"); safe_rerun()
