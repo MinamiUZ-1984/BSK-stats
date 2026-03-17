@@ -8,7 +8,7 @@ import altair as alt
 import uuid
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V16.1", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V17.0", layout="centered")
 
 # --- 0. CSS注入 ---
 st.markdown("""
@@ -289,34 +289,66 @@ def record(item, detail="-", res="成功", pts=0, team=None, name=None):
     st.session_state.history = pd.concat([st.session_state.history, new_row], ignore_index=True)
     st.session_state.mode = "選手選択"; st.toast(f"記録完了")
 
-# --- グラフ描画用関数 ---
+# --- ★進化したグラフ描画関数★ ---
 def draw_stacked_chart(df, x_col, max_y):
     if df.empty: return
     df_m = df.reset_index().melt(id_vars=x_col, var_name='結果', value_name='回数')
-    chart = alt.Chart(df_m).mark_bar().encode(
+    
+    # 棒グラフ本体
+    bars = alt.Chart(df_m).mark_bar().encode(
         x=alt.X(f"{x_col}:N", sort=None, title='', axis=alt.Axis(labelAngle=-45, labelOverlap=False)),
         y=alt.Y('回数:Q', scale=alt.Scale(domain=[0, max_y]), title=''),
         color=alt.Color('結果:N', scale=alt.Scale(domain=['成功', '失敗'], range=['#00b050', '#ff4b4b']), legend=alt.Legend(title="", orient="bottom")),
         tooltip=[f"{x_col}:N", '結果:N', '回数:Q']
-    ).properties(height=250)
+    )
+    
+    # 棒グラフの中の数字（成功数・失敗数）
+    text = alt.Chart(df_m).mark_text(dx=0, dy=12, color='white', baseline='top', fontWeight='bold', fontSize=11).encode(
+        x=alt.X(f"{x_col}:N", sort=None),
+        y=alt.Y('回数:Q', stack='zero'),
+        detail='結果:N',
+        text=alt.condition(alt.datum['回数'] > 0, alt.Text('回数:Q'), alt.value(''))
+    )
+    
+    # 棒グラフの上の数字（Total）
+    df_total = df_m.groupby(x_col, as_index=False)['回数'].sum()
+    total_text = alt.Chart(df_total).mark_text(dy=-8, color='black', fontWeight='bold', fontSize=12).encode(
+        x=alt.X(f"{x_col}:N", sort=None),
+        y=alt.Y('回数:Q'),
+        text=alt.condition(alt.datum['回数'] > 0, alt.Text('回数:Q'), alt.value(''))
+    )
+    
+    chart = alt.layer(bars, text, total_text).properties(height=250)
     st.altair_chart(chart, use_container_width=True)
 
 def draw_simple_bar_chart(s, x_name, max_y, sort_order, color_range=None):
     if s.empty: return
     df = s.to_frame(name='回数').reset_index()
     df.columns = [x_name, '回数']
+    
     color_encode = alt.Color(f'{x_name}:N', legend=None)
     if color_range:
         color_encode = alt.Color(f'{x_name}:N', scale=alt.Scale(domain=sort_order, range=color_range), legend=None)
-    chart = alt.Chart(df).mark_bar().encode(
+        
+    # 棒グラフ本体
+    bars = alt.Chart(df).mark_bar().encode(
         x=alt.X(f"{x_name}:N", sort=sort_order, title='', axis=alt.Axis(labelAngle=0, labelOverlap=False)),
         y=alt.Y('回数:Q', scale=alt.Scale(domain=[0, max_y]), title=''),
         color=color_encode,
         tooltip=[f"{x_name}:N", '回数:Q']
-    ).properties(height=200)
+    )
+    
+    # 棒グラフの上の数字
+    text = alt.Chart(df).mark_text(dy=-8, color='black', fontWeight='bold', fontSize=12).encode(
+        x=alt.X(f"{x_name}:N", sort=sort_order),
+        y=alt.Y('回数:Q'),
+        text=alt.condition(alt.datum['回数'] > 0, alt.Text('回数:Q'), alt.value(''))
+    )
+    
+    chart = alt.layer(bars, text).properties(height=200)
     st.altair_chart(chart, use_container_width=True)
 
-# --- ★自動分析アドバイス関数★ ---
+# --- 自動分析アドバイス関数 ---
 def generate_coach_advice(df, home_name, away_name):
     if df.empty: return "データが十分にありません。"
     
@@ -324,9 +356,7 @@ def generate_coach_advice(df, home_name, away_name):
     a_df = df[df['チーム'] == away_name]
     if h_df.empty: return f"{home_name}のデータがありません。"
 
-    good = []
-    bad = []
-
+    good, bad = [], []
     h_pts = h_df['点数'].sum()
     a_pts = a_df['点数'].sum()
     
@@ -382,7 +412,7 @@ def generate_coach_advice(df, home_name, away_name):
     
     return html
 
-# --- ★レポート本体を描画する関数★ ---
+# --- レポート本体を描画する関数 ---
 def draw_report_body():
     st.header("1. スコア推移")
     try:
@@ -421,8 +451,10 @@ def draw_report_body():
     
     s_stats_h = get_shot_stats(df_h_graph)
     s_stats_a = get_shot_stats(df_a_graph)
+    
+    # ★ テキストがはみ出さないようにY軸の最大値に15%の余裕を持たせる
     max_y_overall = max(s_stats_h.sum(axis=1).max(), s_stats_a.sum(axis=1).max())
-    max_y_overall = int(max_y_overall) + 1 if max_y_overall > 0 else 5
+    max_y_overall = int(max_y_overall * 1.15) + 1 if max_y_overall > 0 else 5
     
     g1, g2 = st.columns(2)
     with g1:
@@ -448,7 +480,7 @@ def draw_report_body():
     a_stats_h = get_area_stats(df_h_graph, area_target, areas_order)
     a_stats_a = get_area_stats(df_a_graph, area_target, areas_order)
     max_y_area = max(a_stats_h.sum(axis=1).max(), a_stats_a.sum(axis=1).max())
-    max_y_area = int(max_y_area) + 1 if max_y_area > 0 else 5
+    max_y_area = int(max_y_area * 1.15) + 1 if max_y_area > 0 else 5
     
     ga1, ga2 = st.columns(2)
     with ga1:
@@ -463,50 +495,54 @@ def draw_report_body():
     st.subheader(f"③ リバウンド ({selected_q_graph})")
     def get_reb_stats(df):
         sh = df[df['項目'].isin(['OR', 'DR'])]
-        if sh.empty: return pd.Series({'OR':0, 'DR':0})
+        if sh.empty: return pd.Series({'OR':0, 'DR':0, 'Total':0})
         stats = sh.groupby('項目').size()
         for c in ['OR', 'DR']:
             if c not in stats.index: stats[c] = 0
-        return stats[['OR', 'DR']]
+        s = stats[['OR', 'DR']]
+        s['Total'] = s.sum() # ★ 合計(Total)を追加
+        return s
         
     r_stats_h = get_reb_stats(df_h_graph)
     r_stats_a = get_reb_stats(df_a_graph)
     max_y_reb = max(r_stats_h.max(), r_stats_a.max())
-    max_y_reb = int(max_y_reb) + 1 if max_y_reb > 0 else 5
+    max_y_reb = int(max_y_reb * 1.15) + 1 if max_y_reb > 0 else 5
     
     gr1, gr2 = st.columns(2)
     with gr1:
         st.write(f"🔵 **{sel_h}**" if sel_h != "全体" else f"🔵 **{st.session_state.home_name}**")
-        if r_stats_h.sum() > 0: draw_simple_bar_chart(r_stats_h, '種類', max_y_reb, ['OR', 'DR'], ['#ff9f43', '#3498db'])
+        if r_stats_h.sum() > 0: draw_simple_bar_chart(r_stats_h, '種類', max_y_reb, ['OR', 'DR', 'Total'], ['#ff9f43', '#3498db', '#2ecc71'])
         else: st.caption("データなし")
     with gr2:
         st.write(f"🔴 **{sel_a}**" if sel_a != "全体" else f"🔴 **{st.session_state.away_name}**")
-        if r_stats_a.sum() > 0: draw_simple_bar_chart(r_stats_a, '種類', max_y_reb, ['OR', 'DR'], ['#ff9f43', '#3498db'])
+        if r_stats_a.sum() > 0: draw_simple_bar_chart(r_stats_a, '種類', max_y_reb, ['OR', 'DR', 'Total'], ['#ff9f43', '#3498db', '#2ecc71'])
         else: st.caption("データなし")
 
     st.subheader(f"④ ターンオーバー ({selected_q_graph})")
     def get_to_stats(df):
         sh = df[df['項目'] == 'TO']
         to_cols = ['TV', 'DD', 'PM', '24S']
-        if sh.empty: return pd.Series({c:0 for c in to_cols})
+        if sh.empty: return pd.Series({c:0 for c in to_cols + ['Total']})
         stats = sh.groupby('詳細').size()
         for c in to_cols:
             if c not in stats.index: stats[c] = 0
-        return stats[to_cols]
+        s = stats[to_cols]
+        s['Total'] = s.sum() # ★ 合計(Total)を追加
+        return s
         
     to_stats_h = get_to_stats(df_h_graph)
     to_stats_a = get_to_stats(df_a_graph)
     max_y_to = max(to_stats_h.max(), to_stats_a.max())
-    max_y_to = int(max_y_to) + 1 if max_y_to > 0 else 5
+    max_y_to = int(max_y_to * 1.15) + 1 if max_y_to > 0 else 5
     
     gt1, gt2 = st.columns(2)
     with gt1:
         st.write(f"🔵 **{sel_h}**" if sel_h != "全体" else f"🔵 **{st.session_state.home_name}**")
-        if to_stats_h.sum() > 0: draw_simple_bar_chart(to_stats_h, '詳細', max_y_to, ['TV', 'DD', 'PM', '24S'], ['#95a5a6', '#95a5a6', '#95a5a6', '#95a5a6'])
+        if to_stats_h.sum() > 0: draw_simple_bar_chart(to_stats_h, '詳細', max_y_to, ['TV', 'DD', 'PM', '24S', 'Total'], ['#95a5a6', '#95a5a6', '#95a5a6', '#95a5a6', '#e74c3c'])
         else: st.caption("データなし")
     with gt2:
         st.write(f"🔴 **{sel_a}**" if sel_a != "全体" else f"🔴 **{st.session_state.away_name}**")
-        if to_stats_a.sum() > 0: draw_simple_bar_chart(to_stats_a, '詳細', max_y_to, ['TV', 'DD', 'PM', '24S'], ['#95a5a6', '#95a5a6', '#95a5a6', '#95a5a6'])
+        if to_stats_a.sum() > 0: draw_simple_bar_chart(to_stats_a, '詳細', max_y_to, ['TV', 'DD', 'PM', '24S', 'Total'], ['#95a5a6', '#95a5a6', '#95a5a6', '#95a5a6', '#e74c3c'])
         else: st.caption("データなし")
 
     st.header("3. 個人スタッツ")
@@ -539,11 +575,13 @@ def draw_report_body():
     st.write(f"🔴 **{st.session_state.away_name}**"); st.table(a_df.drop(columns='Team').set_index('#'))
 
     st.divider()
+    
     st.header("4. 💡 分析結果コメント（自動アドバイス）")
     advice_html = generate_coach_advice(filtered_history, st.session_state.home_name, st.session_state.away_name)
     st.markdown(advice_html, unsafe_allow_html=True)
     
     st.divider()
+
     st.header("5. 詳細ログ")
     st.dataframe(st.session_state.history.iloc[::-1], use_container_width=True)
     
@@ -574,7 +612,7 @@ if st.session_state.read_only:
 
         if st.session_state.history.empty: st.info("データがありません。「最新データを読み込む」ボタンを押してください。")
         elif not st.session_state.report_trigger: st.info("上のボタンを押すと最新のグラフが表示されます。")
-        else: draw_report_body() # ★ レポート描画関数をこのタブの中だけで呼び出す！
+        else: draw_report_body()
 
 else:
     tab_input, tab_report, tab_edit = st.tabs(["✍️ 記録入力", "📄 統計レポート", "🛠 修正"])
@@ -697,7 +735,7 @@ else:
                     st.session_state.report_trigger = True
                     st.rerun()
             else:
-                draw_report_body() # ★ レポート描画関数をこのタブの中だけで呼び出す！
+                draw_report_body()
     
     with tab_edit:
         st.header("🛠 修正")
