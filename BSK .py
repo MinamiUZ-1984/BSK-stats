@@ -9,7 +9,7 @@ import altair as alt
 import uuid
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V18.6", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V18.7", layout="centered")
 
 # --- 0. CSS注入 ---
 st.markdown("""
@@ -29,20 +29,17 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- ★修正：自動スクロール用関数（タイマー遅延＆全対応版） ---
-def auto_scroll_to_bottom():
+# --- ★修正：ターゲットを狙い撃ちする精密スクロール関数 ---
+def auto_scroll_to_target():
     components.html(
         """
         <script>
-            // 画面が描画されるのを少し待ってから（0.4秒後）スクロールを発動！
             setTimeout(function() {
-                const parent = window.parent;
-                // スマホやPCなど、環境によって異なるスクロールコンテナをすべて狙い撃ち
-                const containers = parent.document.querySelectorAll('.main, [data-testid="stAppViewContainer"], [data-testid="stMain"]');
-                containers.forEach(container => {
-                    container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
-                });
-                parent.scrollTo({ top: parent.document.body.scrollHeight, behavior: 'smooth' });
+                const target = window.parent.document.getElementById('scroll-target');
+                if (target) {
+                    // ターゲットが画面の「中央（center）」にくるようにスクロール
+                    target.scrollIntoView({behavior: 'smooth', block: 'center'});
+                }
             }, 400); 
         </script>
         """,
@@ -598,6 +595,9 @@ else:
                 if st.button("キャンセル", use_container_width=True): st.session_state.mode="選手選択"; safe_rerun()
                 
             elif st.session_state.mode == "エリア＆結果選択":
+                # ★精密スクロールのターゲット（目印）を設置！★
+                st.markdown("<div id='scroll-target'></div>", unsafe_allow_html=True)
+                
                 it = st.session_state.tmp.get('item', '2P')
                 st.write(f"🎯 {it} エリア＆結果（記録席からの視点）")
                 
@@ -635,9 +635,10 @@ else:
 
                 st.divider()
                 if st.button("戻る", use_container_width=True): st.session_state.mode="項目選択"; safe_rerun()
-                auto_scroll_to_bottom() 
+                auto_scroll_to_target()
 
             elif st.session_state.mode == "結果選択": # FT用
+                st.markdown("<div id='scroll-target'></div>", unsafe_allow_html=True)
                 st.write(f"🎯 {st.session_state.tmp.get('area', 'FT')}")
                 sc = st.columns(2)
                 item = st.session_state.tmp.get('item', 'FT')
@@ -649,8 +650,10 @@ else:
                     st.session_state.mode = "リバウンド選択"
                     safe_rerun()
                 if st.button("戻る", use_container_width=True): st.session_state.mode="項目選択"; safe_rerun()
+                auto_scroll_to_target()
 
             elif st.session_state.mode == "アシスト選択":
+                st.markdown("<div id='scroll-target'></div>", unsafe_allow_html=True)
                 scorer = st.session_state.tmp.get('player')
                 t_name = st.session_state.tmp.get('team')
                 st.write(f"🏀 **#{scorer}** 得点！アシストは？")
@@ -664,9 +667,10 @@ else:
                             safe_rerun()
                 st.divider()
                 if st.button("❌ アシストなし", use_container_width=True): st.session_state.mode = "選手選択"; safe_rerun()
-                auto_scroll_to_bottom() 
+                auto_scroll_to_target()
 
             elif st.session_state.mode == "リバウンド選択":
+                st.markdown("<div id='scroll-target'></div>", unsafe_allow_html=True)
                 shooter_team = st.session_state.tmp.get('team')
                 st.write(f"🗑️ シュートミス！ 誰がリバウンドを取った？")
                 
@@ -688,7 +692,7 @@ else:
                 
                 st.divider()
                 if st.button("⏩ リバウンド記録なし（スキップ）", use_container_width=True): st.session_state.mode = "選手選択"; safe_rerun()
-                auto_scroll_to_bottom() 
+                auto_scroll_to_target()
 
         st.divider()
         if st.button(f"⏰ {st.session_state.away_name} TOUT", use_container_width=True): record("TOUT", team=st.session_state.away_name, name="TEAM"); safe_rerun()
