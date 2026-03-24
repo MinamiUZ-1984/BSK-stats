@@ -8,29 +8,30 @@ import altair as alt
 import uuid
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V21.0", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V22.0", layout="centered")
 
-# --- 0. CSS注入（超圧縮用に余白をさらに削る） ---
+# --- 0. CSS注入 ---
 st.markdown("""
     <style>
     .stTabs [data-baseweb="tab-list"] { gap: 10px; }
-    [data-testid="stHorizontalBlock"] { display: flex !important; flex-direction: row !important; width: 100% !important; gap: 2px !important; } /* 列の隙間を最小化 */
+    [data-testid="stHorizontalBlock"] { display: flex !important; flex-direction: row !important; width: 100% !important; gap: 2px !important; } 
     [data-testid="stHorizontalBlock"] > div { flex: 1 1 0% !important; min-width: 0 !important; }
     
-    /* ボタンの高さを少し低くし、文字を少し小さくして横並びに対応 */
     .stButton > button { width: 100% !important; padding: 2px 0px !important; font-size: 13px !important; font-weight: bold !important; min-height: 36px !important; margin-bottom: 0px !important; }
     [data-testid="stVerticalBlock"] { gap: 0.1rem !important; }
     
     div[data-testid="stTable"] table { font-size: 9px !important; width: 100% !important; }
     div[data-testid="stTable"] th, div[data-testid="stTable"] td { padding: 2px 1px !important; line-height: 1.1 !important; }
     
-    /* 見出しの上下余白も極限まで削る */
     .court-zone { text-align: center; font-size: 11px; font-weight: bold; color: white; background-color: #d35400; padding: 2px 0; border-radius: 4px; margin-top: 5px; margin-bottom: 2px; }
     .area-label { text-align: center; font-size: 11px; font-weight: bold; color: #333; border-bottom: 2px solid #ccc; margin-top: 5px; margin-bottom: 2px; padding-bottom: 1px; }
     
     .advice-box { background-color: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 5px solid #3498db; margin-bottom: 10px; }
     .advice-good { color: #27ae60; font-weight: bold; }
     .advice-bad { color: #c0392b; font-weight: bold; }
+    
+    /* 真ん中の操作パネルを目立たせるための装飾 */
+    .center-panel-title { text-align:center; font-size:14px; font-weight:bold; color:#fff; background:#2c3e50; padding:5px; border-radius:5px 5px 0 0; margin-bottom:-15px; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -276,12 +277,10 @@ def record(item, detail="-", res="成功", pts=0, team=None, name=None):
     st.session_state.history = pd.concat([st.session_state.history, new_row], ignore_index=True)
     st.session_state.mode = "選手選択"; st.toast(f"記録完了")
 
-# --- ★修正：⭕❌横並び化による超圧縮エリアボタン描画★ ---
 def draw_zone(col, area_name, key_prefix, item_type):
     with col:
         st.markdown(f"<div class='area-label'>{area_name}</div>", unsafe_allow_html=True)
         pts = 2 if item_type == "2P" else 3
-        # ⭕と❌のボタンを横に2つ並べる！
         bc1, bc2 = st.columns(2)
         if bc1.button("⭕", key=f"{key_prefix}_o", type="primary", use_container_width=True):
             record(item_type, detail=area_name, res="成功", pts=pts)
@@ -292,15 +291,14 @@ def draw_zone(col, area_name, key_prefix, item_type):
             st.session_state.mode = "リバウンド選択"
             safe_rerun()
 
-# --- インライン展開用アクションメニュー描画関数 ---
+# --- ★センターパネル用：アクションメニュー描画関数★ ---
 def draw_action_menu():
     player_num = st.session_state.tmp.get('player')
     team_name = st.session_state.tmp.get('team')
+    t_icon = "🔵" if team_name == st.session_state.home_name else "🔴"
     
+    st.markdown(f"<div class='center-panel-title'>{t_icon} {team_name} : #{player_num} 操作パネル</div>", unsafe_allow_html=True)
     with st.container(border=True):
-        if st.session_state.mode != "リバウンド選択":
-            st.info(f"✍️ **#{player_num}** ({team_name}) の記録")
-            
         if st.session_state.mode == "項目選択":
             c = st.columns(3)
             if c[0].button("2P", use_container_width=True, type="primary"): st.session_state.tmp['item']="2P"; st.session_state.mode="エリア＆結果選択"; safe_rerun()
@@ -331,7 +329,7 @@ def draw_action_menu():
                 st.markdown("<div style='text-align:center; font-size:35px; margin-top:-10px; margin-bottom:5px;'>🗑️🏀</div>", unsafe_allow_html=True)
                 
                 st.markdown("<div class='court-zone'>【 ゴール下 】</div>", unsafe_allow_html=True)
-                r1 = st.columns([0.5, 2, 2, 2, 0.5]) # 両端の余白を少しだけ作って中央に寄せる
+                r1 = st.columns([0.5, 2, 2, 2, 0.5])
                 draw_zone(r1[1], "左下", "2p_lbl", "2P")
                 draw_zone(r1[2], "中下", "2p_cbl", "2P")
                 draw_zone(r1[3], "右下", "2p_rbl", "2P")
@@ -342,14 +340,13 @@ def draw_action_menu():
                 draw_zone(r2[2], "中レ", "2p_cl", "2P")
                 draw_zone(r2[3], "右レ", "2p_rl", "2P")
 
-                # ★修正：ミドルエリアを「アーチ状（上3列、下2列）」に配置し、横幅を確保！★
                 st.markdown("<div class='court-zone'>【 ミドル 】</div>", unsafe_allow_html=True)
                 r3_top = st.columns([1, 1, 1])
                 draw_zone(r3_top[0], "左角", "2p_lcor", "2P")
                 draw_zone(r3_top[1], "中", "2p_c", "2P")
                 draw_zone(r3_top[2], "右角", "2p_rcor", "2P")
                 
-                r3_bottom = st.columns([1, 2, 2, 1]) # 中央寄りに配置
+                r3_bottom = st.columns([1, 2, 2, 1]) 
                 draw_zone(r3_bottom[1], "左45", "2p_l45", "2P")
                 draw_zone(r3_bottom[2], "右45", "2p_r45", "2P")
             else: 
@@ -357,7 +354,6 @@ def draw_action_menu():
                 st.markdown("<div style='text-align:center; font-size:16px; color:#ccc; margin-bottom:10px;'>🔺 ペイントエリア 🔺</div>", unsafe_allow_html=True)
                 st.markdown("<div class='court-zone'>【 3Pライン 】</div>", unsafe_allow_html=True)
                 
-                # 3Pもアーチ状に配置
                 r3_top = st.columns([1, 1, 1])
                 draw_zone(r3_top[0], "左角", "3p_lcor", "3P")
                 draw_zone(r3_top[1], "中", "3p_c", "3P")
@@ -679,8 +675,6 @@ else:
         
         st.radio("Q", ["1Q", "2Q", "3Q", "4Q", "OT"], horizontal=True, label_visibility="collapsed", key="current_q", on_change=safe_rerun)
 
-        # 🏀 常に両チームの選手一覧を表示しておき、タップしたチームの「すぐ下」にメニューを展開する！
-        
         # --- HOME チーム ---
         st.write(f"🔵 **{st.session_state.home_name}**")
         if not st.session_state.act_h: st.warning("サイドバーで選手を選んでください")
@@ -691,9 +685,11 @@ else:
                     st.session_state.tmp = {'player': p_num, 'team': st.session_state.home_name}; st.session_state.mode = "項目選択"; safe_rerun()
         if st.button(f"⏰ {st.session_state.home_name} TOUT", use_container_width=True): record("TOUT", team=st.session_state.home_name, name="TEAM"); safe_rerun()
 
-        # HOMEの選手が選ばれていたら、ここにメニューを差し込む（インライン展開）
-        if st.session_state.mode != "選手選択" and st.session_state.tmp.get('team') == st.session_state.home_name:
+        # 🏀★大改修ポイント：メニューを両チームの間に「固定配置」する！★🏀
+        if st.session_state.mode != "選手選択":
+            st.markdown("<div style='margin: 15px 0;'></div>", unsafe_allow_html=True)
             draw_action_menu()
+            st.markdown("<div style='margin: 15px 0;'></div>", unsafe_allow_html=True)
 
         st.divider()
 
@@ -706,10 +702,6 @@ else:
                 if cols_a[i].button(p_num, key=f"a_{p_num}", use_container_width=True):
                     st.session_state.tmp = {'player': p_num, 'team': st.session_state.away_name}; st.session_state.mode = "項目選択"; safe_rerun()
         if st.button(f"⏰ {st.session_state.away_name} TOUT", use_container_width=True): record("TOUT", team=st.session_state.away_name, name="TEAM"); safe_rerun()
-
-        # AWAYの選手が選ばれていたら、ここにメニューを差し込む（インライン展開）
-        if st.session_state.mode != "選手選択" and st.session_state.tmp.get('team') == st.session_state.away_name:
-            draw_action_menu()
 
     with tab_report:
         if st.session_state.history.empty: st.info("データなし")
