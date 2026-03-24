@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import pandas as pd
 import io
 import re
@@ -9,9 +8,9 @@ import altair as alt
 import uuid
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V18.9", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V19.0", layout="centered")
 
-# --- 0. CSS注入（文字とボタンの被り防止・隙間調整） ---
+# --- 0. CSS注入（被り防止・隙間調整・スクロール用JS削除） ---
 st.markdown("""
     <style>
     .stTabs [data-baseweb="tab-list"] { gap: 10px; }
@@ -26,15 +25,14 @@ st.markdown("""
     
     .court-zone { text-align: center; font-size: 12px; font-weight: bold; color: white; background-color: #d35400; padding: 3px 0; border-radius: 4px; margin-top: 15px; margin-bottom: 5px; }
     
-    /* ★修正：表示を1文字分下げ、ボタンとの間にも1文字分の隙間を作る★ */
     .area-label { 
         text-align: center; 
         font-size: 11px; 
         font-weight: bold; 
         color: #333; 
         border-bottom: 2px solid #ccc; 
-        margin-top: 12px;      /* 表示全体を下に下げる */
-        margin-bottom: 15px;   /* ボタンと絶対に被らない隙間を作る */
+        margin-top: 12px;      
+        margin-bottom: 15px;   
         padding-bottom: 2px; 
     }
     
@@ -43,32 +41,6 @@ st.markdown("""
     .advice-bad { color: #c0392b; font-weight: bold; }
     </style>
 """, unsafe_allow_html=True)
-
-# --- ★修正：ターゲットから「ボタン1個分（40px）」下へスクロール ---
-def auto_scroll_to_target():
-    components.html(
-        """
-        <script>
-            setTimeout(function() {
-                const target = window.parent.document.getElementById('scroll-target');
-                if (target) {
-                    target.scrollIntoView({behavior: 'smooth', block: 'start'});
-                    
-                    // ボタン1個分（約40px）だけ追加で下にスクロールする
-                    setTimeout(function() {
-                        const parent = window.parent;
-                        const containers = parent.document.querySelectorAll('.main, [data-testid="stAppViewContainer"], [data-testid="stMain"]');
-                        containers.forEach(container => {
-                            container.scrollBy({ top: 40, behavior: 'smooth' });
-                        });
-                        parent.scrollBy({ top: 40, behavior: 'smooth' });
-                    }, 200);
-                }
-            }, 400); 
-        </script>
-        """,
-        height=0
-    )
 
 # --- ユーザーIDの発行 ---
 if 'user_id' not in st.session_state:
@@ -315,7 +287,6 @@ def record(item, detail="-", res="成功", pts=0, team=None, name=None):
 # --- エリアボタン描画 ---
 def draw_zone(col, area_name, key_prefix, item_type):
     with col:
-        # ★修正：文字の上下に隙間をしっかり空けて、ボタンを絶対に被らせない！
         st.markdown(f"<div class='area-label'>{area_name}</div>", unsafe_allow_html=True)
         pts = 2 if item_type == "2P" else 3
         if st.button("⭕", key=f"{key_prefix}_o", type="primary", use_container_width=True):
@@ -584,150 +555,152 @@ else:
                 qs['Total'] = qs.sum(axis=1); st.table(qs.astype(int))
             except: pass
         
-        st.radio("Q", ["1Q", "2Q", "3Q", "4Q", "OT"], horizontal=True, label_visibility="collapsed", key="current_q", on_change=safe_rerun)
+        # 🏀★大改造ポイント：選手選択モードの時「だけ」、選手一覧を表示する！★🏀
+        if st.session_state.mode == "選手選択":
+            st.radio("Q", ["1Q", "2Q", "3Q", "4Q", "OT"], horizontal=True, label_visibility="collapsed", key="current_q", on_change=safe_rerun)
 
-        st.write(f"🔵 **{st.session_state.home_name}**")
-        if not st.session_state.act_h: st.warning("サイドバーで選手を選んでください")
-        else:
-            cols_h = st.columns(len(st.session_state.act_h))
-            for i, p_num in enumerate(st.session_state.act_h):
-                if cols_h[i].button(p_num, key=f"h_{p_num}", use_container_width=True):
-                    st.session_state.tmp = {'player': p_num, 'team': st.session_state.home_name}; st.session_state.mode = "項目選択"; safe_rerun()
-        if st.button(f"⏰ {st.session_state.home_name} TOUT", use_container_width=True): record("TOUT", team=st.session_state.home_name, name="TEAM"); safe_rerun()
-
-        st.divider()
-        with st.container(border=True):
-            if st.session_state.mode == "選手選択": st.info("選手をタップ")
-            elif st.session_state.mode == "項目選択":
-                st.write(f"**#{st.session_state.tmp.get('player')}**")
-                c = st.columns(3)
-                if c[0].button("2P", use_container_width=True, type="primary"): st.session_state.tmp['item']="2P"; st.session_state.mode="エリア＆結果選択"; safe_rerun()
-                if c[1].button("3P", use_container_width=True, type="primary"): st.session_state.tmp['item']="3P"; st.session_state.mode="エリア＆結果選択"; safe_rerun()
-                if c[2].button("FT", use_container_width=True): st.session_state.tmp['item']="FT"; st.session_state.mode="結果選択"; safe_rerun()
-                o = st.columns(3)
-                with o[0]:
-                    if st.button("OR", use_container_width=True): record("OR"); safe_rerun()
-                    if st.button("DR", use_container_width=True): record("DR"); safe_rerun()
-                with o[1]:
-                    if st.button("AST", use_container_width=True): record("AST"); safe_rerun()
-                    if st.button("STL", use_container_width=True): record("STL"); safe_rerun()
-                with o[2]:
-                    if st.button("F", use_container_width=True): record("Foul"); safe_rerun()
-                st.write("▼ TurnOver")
-                to_cols = st.columns(4)
-                for i, val in enumerate(["TV", "DD", "PM", "24S"]):
-                    if to_cols[i].button(val, use_container_width=True): record("TO", val); safe_rerun()
-                if st.button("キャンセル", use_container_width=True): st.session_state.mode="選手選択"; safe_rerun()
-                
-            elif st.session_state.mode == "エリア＆結果選択":
-                # ★精密スクロールのターゲット（目印）★
-                st.markdown("<div id='scroll-target'></div>", unsafe_allow_html=True)
-                
-                it = st.session_state.tmp.get('item', '2P')
-                st.write(f"🎯 {it} エリア＆結果（記録席からの視点）")
-                
-                if it == "2P":
-                    st.markdown("<div style='text-align:center; font-size:40px; margin-top:-10px; margin-bottom:10px;'>🗑️🏀</div>", unsafe_allow_html=True)
-                    st.markdown("<div class='court-zone'>【 ゴール下 】</div>", unsafe_allow_html=True)
-                    r1 = st.columns([1.5, 2, 2, 2, 1.5])
-                    draw_zone(r1[1], "左下", "2p_lbl", "2P")
-                    draw_zone(r1[2], "中下", "2p_cbl", "2P")
-                    draw_zone(r1[3], "右下", "2p_rbl", "2P")
-
-                    st.markdown("<div class='court-zone'>【 レイアップ 】</div>", unsafe_allow_html=True)
-                    r2 = st.columns([1, 2, 2, 2, 1])
-                    draw_zone(r2[1], "左レ", "2p_ll", "2P")
-                    draw_zone(r2[2], "中レ", "2p_cl", "2P")
-                    draw_zone(r2[3], "右レ", "2p_rl", "2P")
-
-                    st.markdown("<div class='court-zone'>【 ミドル 】</div>", unsafe_allow_html=True)
-                    r3 = st.columns(5)
-                    draw_zone(r3[0], "左角", "2p_lcor", "2P")
-                    draw_zone(r3[1], "左45", "2p_l45", "2P")
-                    draw_zone(r3[2], "中", "2p_c", "2P")
-                    draw_zone(r3[3], "右45", "2p_r45", "2P")
-                    draw_zone(r3[4], "右角", "2p_rcor", "2P")
-                else: 
-                    st.markdown("<div style='text-align:center; font-size:40px; margin-top:-10px; margin-bottom:5px;'>🗑️🏀</div>", unsafe_allow_html=True)
-                    st.markdown("<div style='text-align:center; font-size:20px; color:#ccc; margin-bottom:15px;'>🔺 ペイントエリア 🔺</div>", unsafe_allow_html=True)
-                    st.markdown("<div class='court-zone'>【 3Pライン 】</div>", unsafe_allow_html=True)
-                    r3 = st.columns(5)
-                    draw_zone(r3[0], "左角", "3p_lcor", "3P")
-                    draw_zone(r3[1], "左45", "3p_l45", "3P")
-                    draw_zone(r3[2], "中", "3p_c", "3P")
-                    draw_zone(r3[3], "右45", "3p_r45", "3P")
-                    draw_zone(r3[4], "右角", "3p_rcor", "3P")
-
-                st.divider()
-                if st.button("戻る", use_container_width=True): st.session_state.mode="項目選択"; safe_rerun()
-                auto_scroll_to_target()
-
-            elif st.session_state.mode == "結果選択": # FT用
-                st.markdown("<div id='scroll-target'></div>", unsafe_allow_html=True)
-                st.write(f"🎯 {st.session_state.tmp.get('area', 'FT')}")
-                sc = st.columns(2)
-                item = st.session_state.tmp.get('item', 'FT')
-                if sc[0].button("SUCCESS", use_container_width=True, type="primary"):
-                    record(item, detail=st.session_state.tmp.get('area','-'), res="成功", pts=1)
-                    safe_rerun()
-                if sc[1].button("MISS", use_container_width=True): 
-                    record(item, detail=st.session_state.tmp.get('area','-'), res="失敗", pts=0)
-                    st.session_state.mode = "リバウンド選択"
-                    safe_rerun()
-                if st.button("戻る", use_container_width=True): st.session_state.mode="項目選択"; safe_rerun()
-                auto_scroll_to_target()
-
-            elif st.session_state.mode == "アシスト選択":
-                st.markdown("<div id='scroll-target'></div>", unsafe_allow_html=True)
-                scorer = st.session_state.tmp.get('player')
-                t_name = st.session_state.tmp.get('team')
-                st.write(f"🏀 **#{scorer}** 得点！アシストは？")
-                active_list = st.session_state.act_h if t_name == st.session_state.home_name else st.session_state.act_a
-                assist_candidates = [p for p in active_list if p != scorer]
-                if assist_candidates:
-                    ast_c = st.columns(len(assist_candidates))
-                    for i, p_num in enumerate(assist_candidates):
-                        if ast_c[i].button(p_num, key=f"ast_{p_num}", use_container_width=True):
-                            record("AST", detail=f"to #{scorer}", res="成功", pts=0, team=t_name, name=f"{p_num}番")
-                            safe_rerun()
-                st.divider()
-                if st.button("❌ アシストなし", use_container_width=True): st.session_state.mode = "選手選択"; safe_rerun()
-                auto_scroll_to_target()
-
-            elif st.session_state.mode == "リバウンド選択":
-                st.markdown("<div id='scroll-target'></div>", unsafe_allow_html=True)
-                shooter_team = st.session_state.tmp.get('team')
-                st.write(f"🗑️ シュートミス！ 誰がリバウンドを取った？")
-                
-                st.caption(f"🔵 {st.session_state.home_name}")
-                reb_h_cols = st.columns(len(st.session_state.act_h))
+            st.write(f"🔵 **{st.session_state.home_name}**")
+            if not st.session_state.act_h: st.warning("サイドバーで選手を選んでください")
+            else:
+                cols_h = st.columns(len(st.session_state.act_h))
                 for i, p_num in enumerate(st.session_state.act_h):
-                    if reb_h_cols[i].button(p_num, key=f"reb_h_{p_num}", use_container_width=True):
-                        reb_type = "OR" if st.session_state.home_name == shooter_team else "DR"
-                        record(reb_type, team=st.session_state.home_name, name=f"{p_num}番")
-                        safe_rerun()
+                    if cols_h[i].button(p_num, key=f"h_{p_num}", use_container_width=True):
+                        st.session_state.tmp = {'player': p_num, 'team': st.session_state.home_name}; st.session_state.mode = "項目選択"; safe_rerun()
+            if st.button(f"⏰ {st.session_state.home_name} TOUT", use_container_width=True): record("TOUT", team=st.session_state.home_name, name="TEAM"); safe_rerun()
 
-                st.caption(f"🔴 {st.session_state.away_name}")
-                reb_a_cols = st.columns(len(st.session_state.act_a))
+            st.divider()
+            
+            st.write(f"🔴 **{st.session_state.away_name}**")
+            if not st.session_state.act_a: st.warning("サイドバーで選手を選んでください")
+            else:
+                cols_a = st.columns(len(st.session_state.act_a))
                 for i, p_num in enumerate(st.session_state.act_a):
-                    if reb_a_cols[i].button(p_num, key=f"reb_a_{p_num}", use_container_width=True):
-                        reb_type = "OR" if st.session_state.away_name == shooter_team else "DR"
-                        record(reb_type, team=st.session_state.away_name, name=f"{p_num}番")
-                        safe_rerun()
-                
-                st.divider()
-                if st.button("⏩ リバウンド記録なし（スキップ）", use_container_width=True): st.session_state.mode = "選手選択"; safe_rerun()
-                auto_scroll_to_target()
+                    if cols_a[i].button(p_num, key=f"a_{p_num}", use_container_width=True):
+                        st.session_state.tmp = {'player': p_num, 'team': st.session_state.away_name}; st.session_state.mode = "項目選択"; safe_rerun()
+            if st.button(f"⏰ {st.session_state.away_name} TOUT", use_container_width=True): record("TOUT", team=st.session_state.away_name, name="TEAM"); safe_rerun()
 
-        st.divider()
-        if st.button(f"⏰ {st.session_state.away_name} TOUT", use_container_width=True): record("TOUT", team=st.session_state.away_name, name="TEAM"); safe_rerun()
-        st.write(f"🔴 **{st.session_state.away_name}**")
-        if not st.session_state.act_a: st.warning("サイドバーで選手を選んでください")
+        # 🏀★選手が選ばれたら、選手一覧は隠れて、ここから下のメニュー「だけ」が全画面に表示されます！★🏀
         else:
-            cols_a = st.columns(len(st.session_state.act_a))
-            for i, p_num in enumerate(st.session_state.act_a):
-                if cols_a[i].button(p_num, key=f"a_{p_num}", use_container_width=True):
-                    st.session_state.tmp = {'player': p_num, 'team': st.session_state.away_name}; st.session_state.mode = "項目選択"; safe_rerun()
+            player_num = st.session_state.tmp.get('player')
+            team_name = st.session_state.tmp.get('team')
+            t_icon = "🔵" if team_name == st.session_state.home_name else "🔴"
+            
+            # リバウンド選択以外は、今誰を記録しているかを一番上に表示
+            if st.session_state.mode != "リバウンド選択":
+                st.info(f"✍️ 記録中： {t_icon} **{team_name}** - **#{player_num}**")
+            
+            with st.container(border=True):
+                if st.session_state.mode == "項目選択":
+                    c = st.columns(3)
+                    if c[0].button("2P", use_container_width=True, type="primary"): st.session_state.tmp['item']="2P"; st.session_state.mode="エリア＆結果選択"; safe_rerun()
+                    if c[1].button("3P", use_container_width=True, type="primary"): st.session_state.tmp['item']="3P"; st.session_state.mode="エリア＆結果選択"; safe_rerun()
+                    if c[2].button("FT", use_container_width=True): st.session_state.tmp['item']="FT"; st.session_state.mode="結果選択"; safe_rerun()
+                    o = st.columns(3)
+                    with o[0]:
+                        if st.button("OR", use_container_width=True): record("OR"); safe_rerun()
+                        if st.button("DR", use_container_width=True): record("DR"); safe_rerun()
+                    with o[1]:
+                        if st.button("AST", use_container_width=True): record("AST"); safe_rerun()
+                        if st.button("STL", use_container_width=True): record("STL"); safe_rerun()
+                    with o[2]:
+                        if st.button("F", use_container_width=True): record("Foul"); safe_rerun()
+                    st.write("▼ TurnOver")
+                    to_cols = st.columns(4)
+                    for i, val in enumerate(["TV", "DD", "PM", "24S"]):
+                        if to_cols[i].button(val, use_container_width=True): record("TO", val); safe_rerun()
+                    
+                    st.divider()
+                    if st.button("❌ キャンセル（選手選択に戻る）", use_container_width=True): st.session_state.mode="選手選択"; safe_rerun()
+                
+                elif st.session_state.mode == "エリア＆結果選択":
+                    it = st.session_state.tmp.get('item', '2P')
+                    st.write(f"🎯 {it} エリア＆結果（記録席からの視点）")
+                    
+                    if it == "2P":
+                        st.markdown("<div style='text-align:center; font-size:40px; margin-top:-10px; margin-bottom:10px;'>🗑️🏀</div>", unsafe_allow_html=True)
+                        st.markdown("<div class='court-zone'>【 ゴール下 】</div>", unsafe_allow_html=True)
+                        r1 = st.columns([1.5, 2, 2, 2, 1.5])
+                        draw_zone(r1[1], "左下", "2p_lbl", "2P")
+                        draw_zone(r1[2], "中下", "2p_cbl", "2P")
+                        draw_zone(r1[3], "右下", "2p_rbl", "2P")
+
+                        st.markdown("<div class='court-zone'>【 レイアップ 】</div>", unsafe_allow_html=True)
+                        r2 = st.columns([1, 2, 2, 2, 1])
+                        draw_zone(r2[1], "左レ", "2p_ll", "2P")
+                        draw_zone(r2[2], "中レ", "2p_cl", "2P")
+                        draw_zone(r2[3], "右レ", "2p_rl", "2P")
+
+                        st.markdown("<div class='court-zone'>【 ミドル 】</div>", unsafe_allow_html=True)
+                        r3 = st.columns(5)
+                        draw_zone(r3[0], "左角", "2p_lcor", "2P")
+                        draw_zone(r3[1], "左45", "2p_l45", "2P")
+                        draw_zone(r3[2], "中", "2p_c", "2P")
+                        draw_zone(r3[3], "右45", "2p_r45", "2P")
+                        draw_zone(r3[4], "右角", "2p_rcor", "2P")
+                    else: 
+                        st.markdown("<div style='text-align:center; font-size:40px; margin-top:-10px; margin-bottom:5px;'>🗑️🏀</div>", unsafe_allow_html=True)
+                        st.markdown("<div style='text-align:center; font-size:20px; color:#ccc; margin-bottom:15px;'>🔺 ペイントエリア 🔺</div>", unsafe_allow_html=True)
+                        st.markdown("<div class='court-zone'>【 3Pライン 】</div>", unsafe_allow_html=True)
+                        r3 = st.columns(5)
+                        draw_zone(r3[0], "左角", "3p_lcor", "3P")
+                        draw_zone(r3[1], "左45", "3p_l45", "3P")
+                        draw_zone(r3[2], "中", "3p_c", "3P")
+                        draw_zone(r3[3], "右45", "3p_r45", "3P")
+                        draw_zone(r3[4], "右角", "3p_rcor", "3P")
+
+                    st.divider()
+                    if st.button("🔙 戻る", use_container_width=True): st.session_state.mode="項目選択"; safe_rerun()
+
+                elif st.session_state.mode == "結果選択": # FT用
+                    st.write(f"🎯 {st.session_state.tmp.get('area', 'FT')}")
+                    sc = st.columns(2)
+                    item = st.session_state.tmp.get('item', 'FT')
+                    if sc[0].button("SUCCESS", use_container_width=True, type="primary"):
+                        record(item, detail=st.session_state.tmp.get('area','-'), res="成功", pts=1)
+                        safe_rerun()
+                    if sc[1].button("MISS", use_container_width=True): 
+                        record(item, detail=st.session_state.tmp.get('area','-'), res="失敗", pts=0)
+                        st.session_state.mode = "リバウンド選択"
+                        safe_rerun()
+                    
+                    st.divider()
+                    if st.button("🔙 戻る", use_container_width=True): st.session_state.mode="項目選択"; safe_rerun()
+
+                elif st.session_state.mode == "アシスト選択":
+                    st.write(f"🏀 得点！アシストは？")
+                    active_list = st.session_state.act_h if team_name == st.session_state.home_name else st.session_state.act_a
+                    assist_candidates = [p for p in active_list if p != player_num]
+                    if assist_candidates:
+                        ast_c = st.columns(len(assist_candidates))
+                        for i, p_num in enumerate(assist_candidates):
+                            if ast_c[i].button(p_num, key=f"ast_{p_num}", use_container_width=True):
+                                record("AST", detail=f"to #{player_num}", res="成功", pts=0, team=team_name, name=f"{p_num}番")
+                                safe_rerun()
+                    st.divider()
+                    if st.button("❌ アシストなし（記録完了）", use_container_width=True): st.session_state.mode = "選手選択"; safe_rerun()
+
+                elif st.session_state.mode == "リバウンド選択":
+                    shooter_team = st.session_state.tmp.get('team')
+                    st.error(f"🗑️ シュートミス！ 誰がリバウンドを取った？")
+                    
+                    st.caption(f"🔵 {st.session_state.home_name}")
+                    reb_h_cols = st.columns(len(st.session_state.act_h))
+                    for i, p_num in enumerate(st.session_state.act_h):
+                        if reb_h_cols[i].button(p_num, key=f"reb_h_{p_num}", use_container_width=True):
+                            reb_type = "OR" if st.session_state.home_name == shooter_team else "DR"
+                            record(reb_type, team=st.session_state.home_name, name=f"{p_num}番")
+                            safe_rerun()
+
+                    st.caption(f"🔴 {st.session_state.away_name}")
+                    reb_a_cols = st.columns(len(st.session_state.act_a))
+                    for i, p_num in enumerate(st.session_state.act_a):
+                        if reb_a_cols[i].button(p_num, key=f"reb_a_{p_num}", use_container_width=True):
+                            reb_type = "OR" if st.session_state.away_name == shooter_team else "DR"
+                            record(reb_type, team=st.session_state.away_name, name=f"{p_num}番")
+                            safe_rerun()
+                    
+                    st.divider()
+                    if st.button("⏩ リバウンド記録なし（スキップして完了）", use_container_width=True): st.session_state.mode = "選手選択"; safe_rerun()
 
     with tab_report:
         if st.session_state.history.empty: st.info("データなし")
