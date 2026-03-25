@@ -8,9 +8,9 @@ import altair as alt
 import uuid
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V26.0", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V27.0", layout="centered")
 
-# --- 0. CSS注入（バッジ型見出し＆グリッド配置） ---
+# --- 0. CSS注入（ボタンサイズ1.5倍化＆バランス調整） ---
 st.markdown("""
     <style>
     .stTabs [data-baseweb="tab-list"] { gap: 10px; }
@@ -19,16 +19,24 @@ st.markdown("""
     [data-testid="stHorizontalBlock"] { display: flex !important; flex-direction: row !important; width: 100% !important; gap: 2px !important; } 
     [data-testid="stHorizontalBlock"] > div { flex: 1 1 0% !important; min-width: 0 !important; }
     
-    /* ⭕❌ボタンを横並びで押しやすくし、最背面に設定 */
-    .stButton > button { width: 100% !important; padding: 2px 0px !important; font-size: 13px !important; font-weight: bold !important; min-height: 34px !important; margin-bottom: 0px !important; position: relative; z-index: 1; }
+    /* ★大改修：⭕❌ボタンの高さを1.5倍(36px→54px)、文字サイズを1.5倍(13px→20px)に！★ */
+    .stButton > button { 
+        width: 100% !important; 
+        padding: 2px 0px !important; 
+        font-size: 20px !important; 
+        font-weight: bold !important; 
+        min-height: 54px !important; 
+        margin-bottom: 0px !important; 
+        position: relative; 
+        z-index: 1; 
+    }
     [data-testid="stVerticalBlock"] { gap: 0.1rem !important; }
     
     div[data-testid="stTable"] table { font-size: 9px !important; width: 100% !important; }
     div[data-testid="stTable"] th, div[data-testid="stTable"] td { padding: 2px 1px !important; line-height: 1.1 !important; }
     
-    /* ★修正：オレンジ帯を「文字背景のみのスタイリッシュなバッジ型」に変更★ */
     .court-zone { 
-        display: inline-block; /* 全幅ではなく文字幅に合わせる */
+        display: inline-block; 
         font-size: 13px; 
         font-weight: bold; 
         color: white; 
@@ -36,19 +44,19 @@ st.markdown("""
         padding: 4px 15px; 
         border-radius: 20px; 
         margin-top: 5px; 
-        margin-bottom: 10px; 
+        margin-bottom: 12px; 
     }
     
-    /* 文字ラベルをボタンの上に被せつつ、クリックはすり抜ける魔法のCSS */
-    .label-wrapper { text-align: center; margin-bottom: -12px; position: relative; z-index: 10; pointer-events: none; }
+    /* ★修正：ボタンが大きくなったので、ラベルの食い込み位置を少し下に調整★ */
+    .label-wrapper { text-align: center; margin-bottom: -15px; position: relative; z-index: 10; pointer-events: none; }
     .area-label { 
-        background: rgba(255, 255, 255, 0.85); 
+        background: rgba(255, 255, 255, 0.9); 
         border: 1px solid #aaa; 
         border-radius: 3px;
-        font-size: 10px; 
+        font-size: 11px; /* ラベルもほんの少し見やすく */
         font-weight: bold; 
         color: #111; 
-        padding: 1px 4px; 
+        padding: 1px 5px; 
         display: inline-block;
     }
     
@@ -271,7 +279,7 @@ with st.sidebar:
         st.text_input("自チーム名", key="home_name")
         st.text_input(f"🔵 新規選手を追加", placeholder="例: 13。", key="new_h_input")
         st.button("＋追加＆出場", key="add_h", use_container_width=True, on_click=add_h_player)
-        with st.expander(f"👥 {st.session_state.home_name} 名簿を手動編集"): st.text_area("全背番号 (カンマ区切り)", key="r_str_h")
+        with st.expander(f"👥 {st.session_state.home_name} 名簿を手学編集"): st.text_area("全背番号 (カンマ区切り)", key="r_str_h")
         all_h = [x.strip() for x in st.session_state.r_str_h.split(",") if x.strip()]
         valid_act_h = [x for x in st.session_state.act_h if x in all_h]
         if st.session_state.act_h != valid_act_h: st.session_state.act_h = valid_act_h
@@ -303,7 +311,7 @@ def record(item, detail="-", res="成功", pts=0, team=None, name=None):
     st.session_state.history = pd.concat([st.session_state.history, new_row], ignore_index=True)
     st.session_state.mode = "選手選択"; st.toast(f"記録完了")
 
-# --- 被り完全回避用エリアボタン描画 ---
+# --- エリアボタン描画 ---
 def draw_zone(col, area_name, key_prefix, item_type):
     with col:
         st.markdown(f"<div class='label-wrapper'><div class='area-label'>{area_name}</div></div>", unsafe_allow_html=True)
@@ -365,14 +373,12 @@ def draw_action_menu():
                 draw_zone(r1[6], "右角", "2p_rcor", "2P")
 
                 # 🏀 第2行目：空白(0) | 左レ(1) | 空白(2) | 中下(3) | 空白(4) | 右レ(5) | 空白(6)
-                # ★修正：左レ、右レは1行目のスペース（列1、列5）の真下に配置、かつ1行上に引き上げ！
                 r2 = st.columns(7)
                 draw_zone(r2[1], "左レ", "2p_ll", "2P")
                 draw_zone(r2[3], "中下", "2p_cbl", "2P")
                 draw_zone(r2[5], "右レ", "2p_rl", "2P")
 
                 # 🏀 第3行目：空白(0) | 左45(1) | 空白(2) | 中レ(3) | 空白(4) | 右45(5) | 空白(6)
-                # ★修正：左45、右45も1行上に引き上げ！
                 r3 = st.columns(7)
                 draw_zone(r3[1], "左45", "2p_l45", "2P")
                 draw_zone(r3[3], "中レ", "2p_cl", "2P")
@@ -388,7 +394,7 @@ def draw_action_menu():
                 st.markdown("<div style='text-align:center; font-size:16px; color:#ccc; margin-bottom:10px;'>🔺 ペイントエリア 🔺</div>", unsafe_allow_html=True)
                 st.markdown("<div style='text-align:center;'><span class='court-zone'>【 3P エリア 】</span></div>", unsafe_allow_html=True)
                 
-                # 🏀 3Pも同心円のアーチ型で配置
+                # 🏀 3P
                 r3p_1 = st.columns(7)
                 draw_zone(r3p_1[0], "左角", "3p_lcor", "3P")
                 draw_zone(r3p_1[6], "右角", "3p_rcor", "3P")
