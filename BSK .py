@@ -9,42 +9,57 @@ import uuid
 import streamlit.components.v1 as components
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V30.0", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V31.0", layout="centered")
 
-# --- 0. CSS注入（PCでの巨大化防止 ＆ 高さ最適化） ---
+# --- 0. CSS注入（完全インライン化＆グリッド固定） ---
 st.markdown("""
     <style>
-    /* ★大改修1：アプリの最大横幅を450pxに固定！PCで見ても巨大化しません★ */
+    /* アプリの最大横幅をスマホサイズに固定 */
     .block-container { max-width: 450px !important; padding-left: 4px !important; padding-right: 4px !important; }
     
     .stTabs [data-baseweb="tab-list"] { gap: 10px; }
     
-    /* カラム間の隙間を極限まで詰める */
+    /* カラム間の隙間を極限まで詰めて横並びをキープ */
     [data-testid="column"] { padding: 0 1px !important; }
-    [data-testid="stHorizontalBlock"] { display: flex !important; flex-direction: row !important; width: 100% !important; gap: 0px !important; } 
+    [data-testid="stHorizontalBlock"] { display: flex !important; flex-direction: row !important; width: 100% !important; gap: 0px !important; margin-bottom: 4px !important; align-items: center !important;} 
     [data-testid="stHorizontalBlock"] > div { flex: 1 1 0% !important; min-width: 0 !important; }
     
-    /* ボタンの高さと文字サイズをスマートに調整 */
+    /* ⭕❌ボタンを横幅ピッタリ＆高さ40pxに固定 */
     .stButton > button { 
         width: 100% !important; 
+        height: 40px !important; 
+        min-height: 40px !important;
         padding: 0px !important; 
-        font-size: 15px !important; 
+        font-size: 16px !important; 
         font-weight: bold !important; 
-        min-height: 42px !important; 
         margin-bottom: 0px !important; 
-        position: relative; 
-        z-index: 1; 
     }
     [data-testid="stVerticalBlock"] { gap: 0.1rem !important; }
     
     div[data-testid="stTable"] table { font-size: 9px !important; width: 100% !important; }
     div[data-testid="stTable"] th, div[data-testid="stTable"] td { padding: 2px 1px !important; line-height: 1.1 !important; }
     
+    /* エリア見出し */
     .court-zone { display: inline-block; font-size: 12px; font-weight: bold; color: white; background-color: #d35400; padding: 3px 12px; border-radius: 15px; margin-top: 5px; margin-bottom: 8px; }
     
-    /* ラベルの食い込み位置を調整 */
-    .label-wrapper { text-align: center; margin-bottom: -12px; position: relative; z-index: 10; pointer-events: none; }
-    .area-label { background: rgba(255, 255, 255, 0.9); border: 1px solid #aaa; border-radius: 3px; font-size: 10px; font-weight: bold; color: #111; padding: 1px 4px; display: inline-block; white-space: nowrap; }
+    /* ★大改修：〇と×に挟まれる文字ラベルを、ボタンと同じ高さ(40px)のブロックに変更！★ */
+    .inline-lbl { 
+        background: #f0f2f6; 
+        color: #2c3e50; 
+        font-weight: bold; 
+        font-size: 11px; 
+        text-align: center; 
+        border-radius: 3px; 
+        height: 40px; 
+        line-height: 40px; /* 縦のど真ん中に文字を配置 */
+        margin: 0px; 
+        border: 1px solid #bdc3c7; 
+        white-space: nowrap;
+        box-sizing: border-box;
+    }
+    
+    /* Markdownの余計な余白を消去 */
+    [data-testid="stMarkdownContainer"] p { margin-bottom: 0px !important; }
     
     .center-panel-title { text-align:center; font-size:14px; font-weight:bold; color:#fff; background:#2c3e50; padding:6px; border-radius:5px 5px 0 0; margin-bottom: 0px; }
     
@@ -54,7 +69,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- ターゲットを狙い撃ちする精密スクロール ---
+# --- 精密スクロール ---
 def auto_scroll_to_target():
     components.html(
         """
@@ -318,20 +333,18 @@ def record(item, detail="-", res="成功", pts=0, team=None, name=None):
     st.session_state.history = pd.concat([st.session_state.history, new_row], ignore_index=True)
     st.session_state.mode = "選手選択"; st.toast(f"記録完了")
 
-# --- ★大改修：⭕❌ボタンの幅を「30px」に強制固定するためのグリッド！★ ---
-def draw_zone(col, area_name, key_prefix, item_type):
-    with col:
-        st.markdown(f"<div class='label-wrapper'><div class='area-label'>{area_name}</div></div>", unsafe_allow_html=True)
-        pts = 2 if item_type == "2P" else 3
-        
-        # 見えない5つのマスを作り、「⭕」と「❌」の幅を約27%(30px)に固定！
-        z_cols = st.columns([2.2, 3.0, 0.6, 3.0, 2.2])
-        
-        if z_cols[1].button("⭕", key=f"{key_prefix}_o", type="primary", use_container_width=True):
+# --- ★大改修：「[⭕] [文字] [❌]」を一直線に並べるインライン描画関数★ ---
+def draw_flat_zone(c_o, c_lbl, c_x, area_name, key_prefix, item_type):
+    pts = 2 if item_type == "2P" else 3
+    with c_o:
+        if st.button("⭕", key=f"{key_prefix}_o", use_container_width=True):
             record(item_type, detail=area_name, res="成功", pts=pts)
             st.session_state.mode = "アシスト選択"
             safe_rerun()
-        if z_cols[3].button("❌", key=f"{key_prefix}_x", use_container_width=True):
+    with c_lbl:
+        st.markdown(f"<div class='inline-lbl'>{area_name}</div>", unsafe_allow_html=True)
+    with c_x:
+        if st.button("❌", key=f"{key_prefix}_x", use_container_width=True):
             record(item_type, detail=area_name, res="失敗", pts=0)
             st.session_state.mode = "リバウンド選択"
             safe_rerun()
@@ -374,30 +387,30 @@ def draw_action_menu():
             if it == "2P":
                 st.markdown("<div style='text-align:center;'><span class='court-zone'>【 2P エリア 】</span></div>", unsafe_allow_html=True)
                 
-                # 🏀 第1行目：左角(24) | 空(1) | 左下(24) | 🗑️(2) | 右下(24) | 空(1) | 右角(24)
-                r1 = st.columns([24, 1, 24, 2, 24, 1, 24])
-                draw_zone(r1[0], "左角", "2p_lcor", "2P")
-                draw_zone(r1[2], "左下", "2p_lbl", "2P")
-                with r1[3]:
-                    st.markdown("<div style='text-align:center; font-size:18px; margin-top:20px;'>🗑️</div>", unsafe_allow_html=True)
-                draw_zone(r1[4], "右下", "2p_rbl", "2P")
-                draw_zone(r1[6], "右角", "2p_rcor", "2P")
+                # 🏀 第1行目：⭕左角❌(11,16,11) | Space(4) | ⭕左下❌(11,16,11) | 🗑️(10) | ⭕右下❌(11,16,11) | Space(4) | ⭕右角❌(11,16,11)
+                r1 = st.columns([11,16,11, 4, 11,16,11, 10, 11,16,11, 4, 11,16,11])
+                draw_flat_zone(r1[0], r1[1], r1[2], "左角", "2p_lcor", "2P")
+                draw_flat_zone(r1[4], r1[5], r1[6], "左下", "2p_lbl", "2P")
+                with r1[7]:
+                    st.markdown("<div style='text-align:center; font-size:24px; line-height:40px;'>🗑️</div>", unsafe_allow_html=True)
+                draw_flat_zone(r1[8], r1[9], r1[10], "右下", "2p_rbl", "2P")
+                draw_flat_zone(r1[12], r1[13], r1[14], "右角", "2p_rcor", "2P")
 
-                # 🏀 第2行目：左レ(24) | 中下(24) | 右レ(24)
-                r2 = st.columns([9, 24, 5, 24, 5, 24, 9])
-                draw_zone(r2[1], "左レ", "2p_ll", "2P")
-                draw_zone(r2[3], "中下", "2p_cbl", "2P")
-                draw_zone(r2[5], "右レ", "2p_rl", "2P")
+                # 🏀 第2行目：Space(28) | ⭕左レ❌(11,16,11) | ⭕中下❌(11,16,11) | ⭕右レ❌(11,16,11) | Space(28)
+                r2 = st.columns([28, 11,16,11, 11,16,11, 11,16,11, 28])
+                draw_flat_zone(r2[1], r2[2], r2[3], "左レ", "2p_ll", "2P")
+                draw_flat_zone(r2[4], r2[5], r2[6], "中下", "2p_cbl", "2P")
+                draw_flat_zone(r2[7], r2[8], r2[9], "右レ", "2p_rl", "2P")
 
-                # 🏀 第3行目：左45(24) | 中レ(24) | 右45(24)
-                r3 = st.columns([13, 24, 1, 24, 1, 24, 13])
-                draw_zone(r3[1], "左45", "2p_l45", "2P")
-                draw_zone(r3[3], "中レ", "2p_cl", "2P")
-                draw_zone(r3[5], "右45", "2p_r45", "2P")
+                # 🏀 第3行目：Space(16) | ⭕左45❌(11,16,11) | Sp(12) | ⭕中レ❌(11,16,11) | Sp(12) | ⭕右45❌(11,16,11) | Space(16)
+                r3 = st.columns([16, 11,16,11, 12, 11,16,11, 12, 11,16,11, 16])
+                draw_flat_zone(r3[1], r3[2], r3[3], "左45", "2p_l45", "2P")
+                draw_flat_zone(r3[5], r3[6], r3[7], "中レ", "2p_cl", "2P")
+                draw_flat_zone(r3[9], r3[10], r3[11], "右45", "2p_r45", "2P")
 
-                # 🏀 第4行目：中(24)
-                r4 = st.columns([38, 24, 38])
-                draw_zone(r4[1], "中", "2p_c", "2P")
+                # 🏀 第4行目：Space(66) | ⭕中❌(11,16,11) | Space(66)
+                r4 = st.columns([66, 11,16,11, 66])
+                draw_flat_zone(r4[1], r4[2], r4[3], "中", "2p_c", "2P")
 
             else: 
                 # 3P
@@ -405,16 +418,19 @@ def draw_action_menu():
                 st.markdown("<div style='text-align:center; font-size:16px; color:#ccc; margin-bottom:10px;'>🔺 ペイントエリア 🔺</div>", unsafe_allow_html=True)
                 st.markdown("<div style='text-align:center;'><span class='court-zone'>【 3P エリア 】</span></div>", unsafe_allow_html=True)
                 
-                r3p_1 = st.columns([24, 52, 24])
-                draw_zone(r3p_1[0], "左角", "3p_lcor", "3P")
-                draw_zone(r3p_1[2], "右角", "3p_rcor", "3P")
+                # 🏀 第1行目：⭕左角❌(11,16,11) | Space(94) | ⭕右角❌(11,16,11)
+                r3p_1 = st.columns([11,16,11, 94, 11,16,11])
+                draw_flat_zone(r3p_1[0], r3p_1[1], r3p_1[2], "左角", "3p_lcor", "3P")
+                draw_flat_zone(r3p_1[4], r3p_1[5], r3p_1[6], "右角", "3p_rcor", "3P")
                 
-                r3p_2 = st.columns([12, 24, 28, 24, 12])
-                draw_zone(r3p_2[1], "左45", "3p_l45", "3P")
-                draw_zone(r3p_2[3], "右45", "3p_r45", "3P")
+                # 🏀 第2行目：Space(6) | ⭕左45❌(11,16,11) | Space(82) | ⭕右45❌(11,16,11) | Space(6)
+                r3p_2 = st.columns([6, 11,16,11, 82, 11,16,11, 6])
+                draw_flat_zone(r3p_2[1], r3p_2[2], r3p_2[3], "左45", "3p_l45", "3P")
+                draw_flat_zone(r3p_2[5], r3p_2[6], r3p_2[7], "右45", "3p_r45", "3P")
                 
-                r3p_3 = st.columns([38, 24, 38])
-                draw_zone(r3p_3[1], "中", "3p_c", "3P")
+                # 🏀 第3行目：Space(66) | ⭕中❌(11,16,11) | Space(66)
+                r3p_3 = st.columns([66, 11,16,11, 66])
+                draw_flat_zone(r3p_3[1], r3p_3[2], r3p_3[3], "中", "3p_c", "3P")
 
             st.divider()
             if st.button("🔙 戻る", use_container_width=True): st.session_state.mode="項目選択"; safe_rerun()
