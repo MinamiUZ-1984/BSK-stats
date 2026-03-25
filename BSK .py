@@ -9,7 +9,7 @@ import uuid
 import streamlit.components.v1 as components
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V33.1", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V33.2", layout="centered")
 
 # --- 0. CSS注入（スクロール完全排除＆縦のズレを強制補正） ---
 st.markdown("""
@@ -350,7 +350,7 @@ def draw_action_menu():
     team_name = st.session_state.tmp.get('team')
     t_icon = "🔵" if team_name == st.session_state.home_name else "🔴"
     
-    st.markdown(f"<div id='scroll-target'></div><div class='center-panel-title'>{t_icon} {team_name} : #{player_num} 操作パネル</div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='center-panel-title'>{t_icon} {team_name} : #{player_num} 操作パネル</div>", unsafe_allow_html=True)
     with st.container(border=True):
         if st.session_state.mode == "項目選択":
             c = st.columns(3)
@@ -381,7 +381,7 @@ def draw_action_menu():
             if it == "2P":
                 st.markdown("<div style='text-align:center;'><span class='court-zone'>【 2P エリア 】</span></div>", unsafe_allow_html=True)
                 
-                # 🏀 第1行目：⭕左角❌(11,16,11) | Space(4) | ⭕左下❌(11,16,11) | 🗑️(10) | ⭕右下❌(11,16,11) | Space(4) | ⭕右角❌(11,16,11)
+                # 🏀 第1行目
                 r1 = st.columns([11,16,11, 4, 11,16,11, 10, 11,16,11, 4, 11,16,11])
                 draw_flat_zone(r1[0], r1[1], r1[2], "左角", "2p_lcor", "2P")
                 draw_flat_zone(r1[4], r1[5], r1[6], "左下", "2p_lbl", "2P")
@@ -390,22 +390,21 @@ def draw_action_menu():
                 draw_flat_zone(r1[8], r1[9], r1[10], "右下", "2p_rbl", "2P")
                 draw_flat_zone(r1[12], r1[13], r1[14], "右角", "2p_rcor", "2P")
 
-                # 🏀 第2行目：★3行目の縦列にピタリと合わせる！★
-                # Space(16) | ⭕左レ❌(11,16,11) | Sp(12) | ⭕中下❌(11,16,11) | Sp(12) | ⭕右レ❌(11,16,11) | Space(16)
+                # 🏀 第2行目：3行目の縦列にピタリと合わせる！
                 r2 = st.columns([16, 11,16,11, 12, 11,16,11, 12, 11,16,11, 16])
                 draw_flat_zone(r2[1], r2[2], r2[3], "左レ", "2p_ll", "2P")
                 draw_flat_zone(r2[5], r2[6], r2[7], "中下", "2p_cbl", "2P")
                 draw_flat_zone(r2[9], r2[10], r2[11], "右レ", "2p_rl", "2P")
 
-                # 🏀 第3行目：Space(16) | ⭕左45❌(11,16,11) | Sp(12) | ⭕中レ❌(11,16,11) | Sp(12) | ⭕右45❌(11,16,11) | Space(16)
+                # 🏀 第3行目
                 r3 = st.columns([16, 11,16,11, 12, 11,16,11, 12, 11,16,11, 16])
                 draw_flat_zone(r3[1], r3[2], r3[3], "左45", "2p_l45", "2P")
                 draw_flat_zone(r3[5], r3[6], r3[7], "中レ", "2p_cl", "2P")
                 draw_flat_zone(r3[9], r3[10], r3[11], "右45", "2p_r45", "2P")
 
-                # 🏀 第4行目：Space(66) | ⭕中❌(11,16,11) | Space(66)
-                r4 = st.columns([66, 11,16,11, 66])
-                draw_flat_zone(r4[1], r4[2], r4[3], "中", "2p_c", "2P")
+                # 🏀 第4行目：★「中ミ」に変更し、3行目と全く同じ13分割グリッドを使って縦を完全に揃える！★
+                r4 = st.columns([16, 11,16,11, 12, 11,16,11, 12, 11,16,11, 16])
+                draw_flat_zone(r4[5], r4[6], r4[7], "中ミ", "2p_c", "2P")
 
             else: 
                 # 3P
@@ -413,17 +412,15 @@ def draw_action_menu():
                 st.markdown("<div style='text-align:center; font-size:16px; color:#ccc; margin-bottom:10px;'>🔺 ペイントエリア 🔺</div>", unsafe_allow_html=True)
                 st.markdown("<div style='text-align:center;'><span class='court-zone'>【 3P エリア 】</span></div>", unsafe_allow_html=True)
                 
-                # 🏀 第1行目：⭕左角❌(11,16,11) | Space(94) | ⭕右角❌(11,16,11)
+                # 🏀 3P エリア
                 r3p_1 = st.columns([11,16,11, 94, 11,16,11])
                 draw_flat_zone(r3p_1[0], r3p_1[1], r3p_1[2], "左角", "3p_lcor", "3P")
                 draw_flat_zone(r3p_1[4], r3p_1[5], r3p_1[6], "右角", "3p_rcor", "3P")
                 
-                # 🏀 第2行目：Space(6) | ⭕左45❌(11,16,11) | Space(82) | ⭕右45❌(11,16,11) | Space(6)
                 r3p_2 = st.columns([6, 11,16,11, 82, 11,16,11, 6])
                 draw_flat_zone(r3p_2[1], r3p_2[2], r3p_2[3], "左45", "3p_l45", "3P")
                 draw_flat_zone(r3p_2[5], r3p_2[6], r3p_2[7], "右45", "3p_r45", "3P")
                 
-                # 🏀 第3行目：Space(66) | ⭕中❌(11,16,11) | Space(66)
                 r3p_3 = st.columns([66, 11,16,11, 66])
                 draw_flat_zone(r3p_3[1], r3p_3[2], r3p_3[3], "中", "3p_c", "3P")
 
