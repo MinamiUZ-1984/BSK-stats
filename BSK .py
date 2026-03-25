@@ -8,24 +8,24 @@ import altair as alt
 import uuid
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V27.0", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V28.0", layout="centered")
 
-# --- 0. CSS注入（ボタンサイズ1.5倍化＆バランス調整） ---
+# --- 0. CSS注入（横幅拡張・高さは元に戻す） ---
 st.markdown("""
     <style>
     .stTabs [data-baseweb="tab-list"] { gap: 10px; }
     
-    /* 列の隙間を極限まで詰めてエクセル感をキープ */
+    /* 列の隙間を極限まで詰めて横幅をボタンに全振り */
     [data-testid="stHorizontalBlock"] { display: flex !important; flex-direction: row !important; width: 100% !important; gap: 2px !important; } 
     [data-testid="stHorizontalBlock"] > div { flex: 1 1 0% !important; min-width: 0 !important; }
     
-    /* ★大改修：⭕❌ボタンの高さを1.5倍(36px→54px)、文字サイズを1.5倍(13px→20px)に！★ */
+    /* ★大改修：高さと文字は元のスマートなサイズに戻し、横幅だけを広く取れるように設定★ */
     .stButton > button { 
         width: 100% !important; 
-        padding: 2px 0px !important; 
-        font-size: 20px !important; 
+        padding: 0px !important; 
+        font-size: 14px !important; 
         font-weight: bold !important; 
-        min-height: 54px !important; 
+        min-height: 40px !important; 
         margin-bottom: 0px !important; 
         position: relative; 
         z-index: 1; 
@@ -37,30 +37,29 @@ st.markdown("""
     
     .court-zone { 
         display: inline-block; 
-        font-size: 13px; 
+        font-size: 12px; 
         font-weight: bold; 
         color: white; 
         background-color: #d35400; 
-        padding: 4px 15px; 
-        border-radius: 20px; 
+        padding: 3px 12px; 
+        border-radius: 15px; 
         margin-top: 5px; 
-        margin-bottom: 12px; 
+        margin-bottom: 8px; 
     }
     
-    /* ★修正：ボタンが大きくなったので、ラベルの食い込み位置を少し下に調整★ */
-    .label-wrapper { text-align: center; margin-bottom: -15px; position: relative; z-index: 10; pointer-events: none; }
+    /* ラベルの食い込み位置を調整（ボタンが元の高さに戻ったため） */
+    .label-wrapper { text-align: center; margin-bottom: -10px; position: relative; z-index: 10; pointer-events: none; }
     .area-label { 
         background: rgba(255, 255, 255, 0.9); 
         border: 1px solid #aaa; 
         border-radius: 3px;
-        font-size: 11px; /* ラベルもほんの少し見やすく */
+        font-size: 10px; 
         font-weight: bold; 
         color: #111; 
-        padding: 1px 5px; 
+        padding: 1px 4px; 
         display: inline-block;
     }
     
-    /* 操作パネル */
     .center-panel-title { text-align:center; font-size:14px; font-weight:bold; color:#fff; background:#2c3e50; padding:6px; border-radius:5px 5px 0 0; margin-bottom: 0px; }
     
     .advice-box { background-color: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 5px solid #3498db; margin-bottom: 10px; }
@@ -279,7 +278,7 @@ with st.sidebar:
         st.text_input("自チーム名", key="home_name")
         st.text_input(f"🔵 新規選手を追加", placeholder="例: 13。", key="new_h_input")
         st.button("＋追加＆出場", key="add_h", use_container_width=True, on_click=add_h_player)
-        with st.expander(f"👥 {st.session_state.home_name} 名簿を手学編集"): st.text_area("全背番号 (カンマ区切り)", key="r_str_h")
+        with st.expander(f"👥 {st.session_state.home_name} 名簿を手動編集"): st.text_area("全背番号 (カンマ区切り)", key="r_str_h")
         all_h = [x.strip() for x in st.session_state.r_str_h.split(",") if x.strip()]
         valid_act_h = [x for x in st.session_state.act_h if x in all_h]
         if st.session_state.act_h != valid_act_h: st.session_state.act_h = valid_act_h
@@ -363,8 +362,11 @@ def draw_action_menu():
             if it == "2P":
                 st.markdown("<div style='text-align:center;'><span class='court-zone'>【 2P エリア 】</span></div>", unsafe_allow_html=True)
                 
-                # 🏀 第1行目：左角(0) | 空白(1) | 左下(2) | 🗑️(3) | 右下(4) | 空白(5) | 右角(6)
-                r1 = st.columns(7)
+                # 🏀★大改修：各ボタンの幅を「20」に設定し、1行の合計を「100」に統一！★🏀
+                # これにより、高さは元のままで「ボタンの横幅だけが1.5倍」に拡張されます！
+                
+                # 第1行目：左角(20) | 隙間(5) | 左下(20) | 🗑️(10) | 右下(20) | 隙間(5) | 右角(20)
+                r1 = st.columns([20, 5, 20, 10, 20, 5, 20])
                 draw_zone(r1[0], "左角", "2p_lcor", "2P")
                 draw_zone(r1[2], "左下", "2p_lbl", "2P")
                 with r1[3]:
@@ -372,21 +374,21 @@ def draw_action_menu():
                 draw_zone(r1[4], "右下", "2p_rbl", "2P")
                 draw_zone(r1[6], "右角", "2p_rcor", "2P")
 
-                # 🏀 第2行目：空白(0) | 左レ(1) | 空白(2) | 中下(3) | 空白(4) | 右レ(5) | 空白(6)
-                r2 = st.columns(7)
+                # 第2行目：左レ(20) | 中下(20) | 右レ(20)  ※左レ・右レは1行目の隙間(5)の真下に配置
+                r2 = st.columns([10, 20, 10, 20, 10, 20, 10])
                 draw_zone(r2[1], "左レ", "2p_ll", "2P")
                 draw_zone(r2[3], "中下", "2p_cbl", "2P")
                 draw_zone(r2[5], "右レ", "2p_rl", "2P")
 
-                # 🏀 第3行目：空白(0) | 左45(1) | 空白(2) | 中レ(3) | 空白(4) | 右45(5) | 空白(6)
-                r3 = st.columns(7)
+                # 第3行目：左45(20) | 中レ(20) | 右45(20)
+                r3 = st.columns([10, 20, 10, 20, 10, 20, 10])
                 draw_zone(r3[1], "左45", "2p_l45", "2P")
                 draw_zone(r3[3], "中レ", "2p_cl", "2P")
                 draw_zone(r3[5], "右45", "2p_r45", "2P")
 
-                # 🏀 第4行目：空白(0,1,2) | 中(3) | 空白(4,5,6)
-                r4 = st.columns(7)
-                draw_zone(r4[3], "中", "2p_c", "2P")
+                # 第4行目：中(20)
+                r4 = st.columns([40, 20, 40])
+                draw_zone(r4[1], "中", "2p_c", "2P")
 
             else: 
                 # 3P
@@ -394,17 +396,19 @@ def draw_action_menu():
                 st.markdown("<div style='text-align:center; font-size:16px; color:#ccc; margin-bottom:10px;'>🔺 ペイントエリア 🔺</div>", unsafe_allow_html=True)
                 st.markdown("<div style='text-align:center;'><span class='court-zone'>【 3P エリア 】</span></div>", unsafe_allow_html=True)
                 
-                # 🏀 3P
-                r3p_1 = st.columns(7)
+                # 第1行目：左角(20) | 右角(20)
+                r3p_1 = st.columns([20, 60, 20])
                 draw_zone(r3p_1[0], "左角", "3p_lcor", "3P")
-                draw_zone(r3p_1[6], "右角", "3p_rcor", "3P")
+                draw_zone(r3p_1[2], "右角", "3p_rcor", "3P")
                 
-                r3p_2 = st.columns(7)
+                # 第2行目：左45(20) | 右45(20)
+                r3p_2 = st.columns([10, 20, 40, 20, 10])
                 draw_zone(r3p_2[1], "左45", "3p_l45", "3P")
-                draw_zone(r3p_2[5], "右45", "3p_r45", "3P")
+                draw_zone(r3p_2[3], "右45", "3p_r45", "3P")
                 
-                r3p_3 = st.columns(7)
-                draw_zone(r3p_3[3], "中", "3p_c", "3P")
+                # 第3行目：中(20)
+                r3p_3 = st.columns([40, 20, 40])
+                draw_zone(r3p_3[1], "中", "3p_c", "3P")
 
             st.divider()
             if st.button("🔙 戻る", use_container_width=True): st.session_state.mode="項目選択"; safe_rerun()
