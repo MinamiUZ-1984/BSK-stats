@@ -6,14 +6,15 @@ import os
 import json
 import altair as alt
 import uuid
+import streamlit.components.v1 as components
 
 # ページ設定
 st.set_page_config(page_title="バスケ分析Pro V30.0", layout="centered")
 
-# --- 0. CSS注入（PCでの巨大化防止 ＆ スマホでのボタン高さ強制固定） ---
+# --- 0. CSS注入（PCでの巨大化防止 ＆ 高さ最適化） ---
 st.markdown("""
     <style>
-    /* ★大改修1：アプリの最大横幅を450pxに固定！PCで見てもスマホサイズの操作盤になります★ */
+    /* ★大改修1：アプリの最大横幅を450pxに固定！PCで見ても巨大化しません★ */
     .block-container { max-width: 450px !important; padding-left: 4px !important; padding-right: 4px !important; }
     
     .stTabs [data-baseweb="tab-list"] { gap: 10px; }
@@ -23,13 +24,13 @@ st.markdown("""
     [data-testid="stHorizontalBlock"] { display: flex !important; flex-direction: row !important; width: 100% !important; gap: 0px !important; } 
     [data-testid="stHorizontalBlock"] > div { flex: 1 1 0% !important; min-width: 0 !important; }
     
-    /* ★大改修2：ボタンの高さを「55px」に数値で強制固定！スマホでも確実にデカくなります★ */
+    /* ボタンの高さと文字サイズをスマートに調整 */
     .stButton > button { 
         width: 100% !important; 
-        height: 55px !important; /* ← 高さをピクセルでガッツリ固定！ */
         padding: 0px !important; 
-        font-size: 16px !important; /* 文字も大きめに固定 */
+        font-size: 15px !important; 
         font-weight: bold !important; 
+        min-height: 42px !important; 
         margin-bottom: 0px !important; 
         position: relative; 
         z-index: 1; 
@@ -42,8 +43,8 @@ st.markdown("""
     .court-zone { display: inline-block; font-size: 12px; font-weight: bold; color: white; background-color: #d35400; padding: 3px 12px; border-radius: 15px; margin-top: 5px; margin-bottom: 8px; }
     
     /* ラベルの食い込み位置を調整 */
-    .label-wrapper { text-align: center; margin-bottom: -15px; position: relative; z-index: 10; pointer-events: none; }
-    .area-label { background: rgba(255, 255, 255, 0.9); border: 1px solid #aaa; border-radius: 3px; font-size: 11px; font-weight: bold; color: #111; padding: 1px 4px; display: inline-block; white-space: nowrap; }
+    .label-wrapper { text-align: center; margin-bottom: -12px; position: relative; z-index: 10; pointer-events: none; }
+    .area-label { background: rgba(255, 255, 255, 0.9); border: 1px solid #aaa; border-radius: 3px; font-size: 10px; font-weight: bold; color: #111; padding: 1px 4px; display: inline-block; white-space: nowrap; }
     
     .center-panel-title { text-align:center; font-size:14px; font-weight:bold; color:#fff; background:#2c3e50; padding:6px; border-radius:5px 5px 0 0; margin-bottom: 0px; }
     
@@ -52,6 +53,28 @@ st.markdown("""
     .advice-bad { color: #c0392b; font-weight: bold; }
     </style>
 """, unsafe_allow_html=True)
+
+# --- ターゲットを狙い撃ちする精密スクロール ---
+def auto_scroll_to_target():
+    components.html(
+        """
+        <script>
+            setTimeout(function() {
+                const target = window.parent.document.getElementById('scroll-target');
+                if (target) {
+                    target.scrollIntoView({behavior: 'smooth', block: 'start'});
+                    setTimeout(function() {
+                        const parent = window.parent;
+                        const containers = parent.document.querySelectorAll('.main, [data-testid="stAppViewContainer"], [data-testid="stMain"]');
+                        containers.forEach(container => { container.scrollBy({ top: -20, behavior: 'smooth' }); });
+                        parent.scrollBy({ top: -20, behavior: 'smooth' });
+                    }, 200);
+                }
+            }, 400); 
+        </script>
+        """,
+        height=0
+    )
 
 # --- ユーザーIDの発行 ---
 if 'user_id' not in st.session_state:
@@ -295,17 +318,20 @@ def record(item, detail="-", res="成功", pts=0, team=None, name=None):
     st.session_state.history = pd.concat([st.session_state.history, new_row], ignore_index=True)
     st.session_state.mode = "選手選択"; st.toast(f"記録完了")
 
-# --- エリアボタン描画 ---
+# --- ★大改修：⭕❌ボタンの幅を「30px」に強制固定するためのグリッド！★ ---
 def draw_zone(col, area_name, key_prefix, item_type):
     with col:
         st.markdown(f"<div class='label-wrapper'><div class='area-label'>{area_name}</div></div>", unsafe_allow_html=True)
         pts = 2 if item_type == "2P" else 3
-        bc1, bc2 = st.columns(2)
-        if bc1.button("⭕", key=f"{key_prefix}_o", type="primary", use_container_width=True):
+        
+        # 見えない5つのマスを作り、「⭕」と「❌」の幅を約27%(30px)に固定！
+        z_cols = st.columns([2.2, 3.0, 0.6, 3.0, 2.2])
+        
+        if z_cols[1].button("⭕", key=f"{key_prefix}_o", type="primary", use_container_width=True):
             record(item_type, detail=area_name, res="成功", pts=pts)
             st.session_state.mode = "アシスト選択"
             safe_rerun()
-        if bc2.button("❌", key=f"{key_prefix}_x", use_container_width=True):
+        if z_cols[3].button("❌", key=f"{key_prefix}_x", use_container_width=True):
             record(item_type, detail=area_name, res="失敗", pts=0)
             st.session_state.mode = "リバウンド選択"
             safe_rerun()
@@ -316,7 +342,7 @@ def draw_action_menu():
     team_name = st.session_state.tmp.get('team')
     t_icon = "🔵" if team_name == st.session_state.home_name else "🔴"
     
-    st.markdown(f"<div class='center-panel-title'>{t_icon} {team_name} : #{player_num} 操作パネル</div>", unsafe_allow_html=True)
+    st.markdown(f"<div id='scroll-target'></div><div class='center-panel-title'>{t_icon} {team_name} : #{player_num} 操作パネル</div>", unsafe_allow_html=True)
     with st.container(border=True):
         if st.session_state.mode == "項目選択":
             c = st.columns(3)
@@ -341,12 +367,14 @@ def draw_action_menu():
             
             st.divider()
             if st.button("❌ キャンセル", use_container_width=True): st.session_state.mode="選手選択"; safe_rerun()
+            auto_scroll_to_target()
             
         elif st.session_state.mode == "エリア＆結果選択":
             it = st.session_state.tmp.get('item', '2P')
             if it == "2P":
                 st.markdown("<div style='text-align:center;'><span class='court-zone'>【 2P エリア 】</span></div>", unsafe_allow_html=True)
                 
+                # 🏀 第1行目：左角(24) | 空(1) | 左下(24) | 🗑️(2) | 右下(24) | 空(1) | 右角(24)
                 r1 = st.columns([24, 1, 24, 2, 24, 1, 24])
                 draw_zone(r1[0], "左角", "2p_lcor", "2P")
                 draw_zone(r1[2], "左下", "2p_lbl", "2P")
@@ -355,16 +383,19 @@ def draw_action_menu():
                 draw_zone(r1[4], "右下", "2p_rbl", "2P")
                 draw_zone(r1[6], "右角", "2p_rcor", "2P")
 
+                # 🏀 第2行目：左レ(24) | 中下(24) | 右レ(24)
                 r2 = st.columns([9, 24, 5, 24, 5, 24, 9])
                 draw_zone(r2[1], "左レ", "2p_ll", "2P")
                 draw_zone(r2[3], "中下", "2p_cbl", "2P")
                 draw_zone(r2[5], "右レ", "2p_rl", "2P")
 
+                # 🏀 第3行目：左45(24) | 中レ(24) | 右45(24)
                 r3 = st.columns([13, 24, 1, 24, 1, 24, 13])
                 draw_zone(r3[1], "左45", "2p_l45", "2P")
                 draw_zone(r3[3], "中レ", "2p_cl", "2P")
                 draw_zone(r3[5], "右45", "2p_r45", "2P")
 
+                # 🏀 第4行目：中(24)
                 r4 = st.columns([38, 24, 38])
                 draw_zone(r4[1], "中", "2p_c", "2P")
 
@@ -387,6 +418,7 @@ def draw_action_menu():
 
             st.divider()
             if st.button("🔙 戻る", use_container_width=True): st.session_state.mode="項目選択"; safe_rerun()
+            auto_scroll_to_target()
 
         elif st.session_state.mode == "結果選択": # FT用
             st.write(f"🎯 {st.session_state.tmp.get('area', 'FT')}")
@@ -401,6 +433,7 @@ def draw_action_menu():
                 safe_rerun()
             st.divider()
             if st.button("🔙 戻る", use_container_width=True): st.session_state.mode="項目選択"; safe_rerun()
+            auto_scroll_to_target()
 
         elif st.session_state.mode == "アシスト選択":
             st.write(f"🏀 得点！アシストは？")
@@ -414,6 +447,7 @@ def draw_action_menu():
                         safe_rerun()
             st.divider()
             if st.button("❌ アシストなし", use_container_width=True): st.session_state.mode = "選手選択"; safe_rerun()
+            auto_scroll_to_target()
 
         elif st.session_state.mode == "リバウンド選択":
             shooter_team = st.session_state.tmp.get('team')
@@ -437,6 +471,7 @@ def draw_action_menu():
             
             st.divider()
             if st.button("⏩ リバウンド記録なし（スキップ）", use_container_width=True): st.session_state.mode = "選手選択"; safe_rerun()
+            auto_scroll_to_target()
 
 def draw_stacked_chart(df, x_col, max_y):
     if df.empty: return
