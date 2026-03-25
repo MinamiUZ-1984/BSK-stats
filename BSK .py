@@ -9,9 +9,9 @@ import uuid
 import streamlit.components.v1 as components
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V31.0", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V32.0", layout="centered")
 
-# --- 0. CSS注入（完全インライン化＆グリッド固定） ---
+# --- 0. CSS注入（ボタンと文字の高さを完全に揃え、正方形化） ---
 st.markdown("""
     <style>
     /* アプリの最大横幅をスマホサイズに固定 */
@@ -24,43 +24,45 @@ st.markdown("""
     [data-testid="stHorizontalBlock"] { display: flex !important; flex-direction: row !important; width: 100% !important; gap: 0px !important; margin-bottom: 4px !important; align-items: center !important;} 
     [data-testid="stHorizontalBlock"] > div { flex: 1 1 0% !important; min-width: 0 !important; }
     
-    /* ⭕❌ボタンを横幅ピッタリ＆高さ40pxに固定 */
+    /* ★大改修：⭕❌ボタンを「縦11マス・横11マス」相当の『正方形(48px)』に固定！★ */
     .stButton > button { 
         width: 100% !important; 
-        height: 40px !important; 
-        min-height: 40px !important;
+        height: 48px !important; 
+        min-height: 48px !important;
         padding: 0px !important; 
-        font-size: 16px !important; 
+        font-size: 18px !important; /* ボタンが大きくなったので文字も大きく */
         font-weight: bold !important; 
-        margin-bottom: 0px !important; 
+        margin: 0px !important; 
+        border-radius: 6px !important;
     }
-    [data-testid="stVerticalBlock"] { gap: 0.1rem !important; }
     
-    div[data-testid="stTable"] table { font-size: 9px !important; width: 100% !important; }
-    div[data-testid="stTable"] th, div[data-testid="stTable"] td { padding: 2px 1px !important; line-height: 1.1 !important; }
-    
-    /* エリア見出し */
-    .court-zone { display: inline-block; font-size: 12px; font-weight: bold; color: white; background-color: #d35400; padding: 3px 12px; border-radius: 15px; margin-top: 5px; margin-bottom: 8px; }
-    
-    /* ★大改修：〇と×に挟まれる文字ラベルを、ボタンと同じ高さ(40px)のブロックに変更！★ */
+    /* ★大改修：文字（ラベル）の高さもボタンと同じ「48px」に完全固定し、ズレをなくす！★ */
     .inline-lbl { 
         background: #f0f2f6; 
         color: #2c3e50; 
         font-weight: bold; 
         font-size: 11px; 
-        text-align: center; 
-        border-radius: 3px; 
-        height: 40px; 
-        line-height: 40px; /* 縦のど真ん中に文字を配置 */
-        margin: 0px; 
+        display: flex !important;
+        align-items: center !important;      /* 縦の中心に揃える */
+        justify-content: center !important;  /* 横の中心に揃える */
+        height: 48px !important;             /* ボタンと全く同じ高さ */
+        margin: 0px !important; 
         border: 1px solid #bdc3c7; 
+        border-radius: 4px !important;
         white-space: nowrap;
         box-sizing: border-box;
     }
     
-    /* Markdownの余計な余白を消去 */
-    [data-testid="stMarkdownContainer"] p { margin-bottom: 0px !important; }
+    /* Streamlitが勝手に作る「見えない余白」を徹底的に破壊 */
+    .stMarkdown { width: 100% !important; }
+    [data-testid="stMarkdownContainer"] { display: flex; justify-content: center; align-items: center; height: 100%; }
+    [data-testid="stMarkdownContainer"] p { margin: 0px !important; padding: 0px !important; width: 100%; }
     
+    [data-testid="stVerticalBlock"] { gap: 0.1rem !important; }
+    div[data-testid="stTable"] table { font-size: 9px !important; width: 100% !important; }
+    div[data-testid="stTable"] th, div[data-testid="stTable"] td { padding: 2px 1px !important; line-height: 1.1 !important; }
+    
+    .court-zone { display: inline-block; font-size: 12px; font-weight: bold; color: white; background-color: #d35400; padding: 3px 12px; border-radius: 15px; margin-top: 5px; margin-bottom: 8px; }
     .center-panel-title { text-align:center; font-size:14px; font-weight:bold; color:#fff; background:#2c3e50; padding:6px; border-radius:5px 5px 0 0; margin-bottom: 0px; }
     
     .advice-box { background-color: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 5px solid #3498db; margin-bottom: 10px; }
@@ -333,7 +335,7 @@ def record(item, detail="-", res="成功", pts=0, team=None, name=None):
     st.session_state.history = pd.concat([st.session_state.history, new_row], ignore_index=True)
     st.session_state.mode = "選手選択"; st.toast(f"記録完了")
 
-# --- ★大改修：「[⭕] [文字] [❌]」を一直線に並べるインライン描画関数★ ---
+# --- 「[⭕] [文字] [❌]」を同じ高さで美しく並べるインライン描画関数 ---
 def draw_flat_zone(c_o, c_lbl, c_x, area_name, key_prefix, item_type):
     pts = 2 if item_type == "2P" else 3
     with c_o:
@@ -392,7 +394,7 @@ def draw_action_menu():
                 draw_flat_zone(r1[0], r1[1], r1[2], "左角", "2p_lcor", "2P")
                 draw_flat_zone(r1[4], r1[5], r1[6], "左下", "2p_lbl", "2P")
                 with r1[7]:
-                    st.markdown("<div style='text-align:center; font-size:24px; line-height:40px;'>🗑️</div>", unsafe_allow_html=True)
+                    st.markdown("<div style='text-align:center; font-size:24px; line-height:48px;'>🗑️</div>", unsafe_allow_html=True)
                 draw_flat_zone(r1[8], r1[9], r1[10], "右下", "2p_rbl", "2P")
                 draw_flat_zone(r1[12], r1[13], r1[14], "右角", "2p_rcor", "2P")
 
