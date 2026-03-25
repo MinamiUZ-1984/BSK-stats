@@ -6,9 +6,10 @@ import os
 import json
 import altair as alt
 import uuid
+import streamlit.components.v1 as components
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V33.0", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V33.1", layout="centered")
 
 # --- 0. CSS注入（スクロール完全排除＆縦のズレを強制補正） ---
 st.markdown("""
@@ -23,7 +24,7 @@ st.markdown("""
         padding: 0 1px !important; 
         display: flex !important; 
         flex-direction: column !important; 
-        justify-content: center !important; /* ★修正：カラムの中身を縦の「ど真ん中」に揃える★ */
+        justify-content: center !important; 
     }
     
     [data-testid="stHorizontalBlock"] { 
@@ -32,7 +33,7 @@ st.markdown("""
         width: 100% !important; 
         gap: 0px !important; 
         margin-bottom: 4px !important; 
-        align-items: center !important; /* ★修正：横並び要素を中央に串刺し★ */
+        align-items: center !important; 
     } 
     [data-testid="stHorizontalBlock"] > div { flex: 1 1 0% !important; min-width: 0 !important; }
     
@@ -48,19 +49,18 @@ st.markdown("""
         border-radius: 6px !important;
     }
     
-    /* ボタンを囲むコンテナの余白を消去 */
     .stButton { margin: 0px !important; padding: 0px !important; }
     
-    /* ★大改修：文字（ラベル）の高さもボタンと同じ「48px」に完全固定し、ズレをなくす！★ */
+    /* 文字（ラベル）の高さをボタンと同じ「48px」に完全固定 */
     .inline-lbl { 
         background: #f0f2f6; 
         color: #2c3e50; 
         font-weight: bold; 
         font-size: 11px; 
         display: flex !important;
-        align-items: center !important;      /* 縦の中心に揃える */
-        justify-content: center !important;  /* 横の中心に揃える */
-        height: 48px !important;             /* ボタンと全く同じ高さ */
+        align-items: center !important;      
+        justify-content: center !important;  
+        height: 48px !important;             
         margin: 0px !important; 
         border: 1px solid #bdc3c7; 
         border-radius: 4px !important;
@@ -68,7 +68,7 @@ st.markdown("""
         box-sizing: border-box;
     }
     
-    /* Streamlitが勝手に作る「見えない余白」を徹底的に破壊 */
+    /* 余白を徹底的に破壊 */
     .stMarkdown { width: 100% !important; margin: 0px !important; padding: 0px !important; }
     [data-testid="stMarkdownContainer"] { display: flex; justify-content: center; align-items: center; height: 100%; margin: 0px !important; }
     [data-testid="stMarkdownContainer"] p { margin: 0px !important; padding: 0px !important; width: 100%; }
@@ -350,7 +350,7 @@ def draw_action_menu():
     team_name = st.session_state.tmp.get('team')
     t_icon = "🔵" if team_name == st.session_state.home_name else "🔴"
     
-    st.markdown(f"<div class='center-panel-title'>{t_icon} {team_name} : #{player_num} 操作パネル</div>", unsafe_allow_html=True)
+    st.markdown(f"<div id='scroll-target'></div><div class='center-panel-title'>{t_icon} {team_name} : #{player_num} 操作パネル</div>", unsafe_allow_html=True)
     with st.container(border=True):
         if st.session_state.mode == "項目選択":
             c = st.columns(3)
@@ -390,11 +390,12 @@ def draw_action_menu():
                 draw_flat_zone(r1[8], r1[9], r1[10], "右下", "2p_rbl", "2P")
                 draw_flat_zone(r1[12], r1[13], r1[14], "右角", "2p_rcor", "2P")
 
-                # 🏀 第2行目：Space(28) | ⭕左レ❌(11,16,11) | ⭕中下❌(11,16,11) | ⭕右レ❌(11,16,11) | Space(28)
-                r2 = st.columns([28, 11,16,11, 11,16,11, 11,16,11, 28])
+                # 🏀 第2行目：★3行目の縦列にピタリと合わせる！★
+                # Space(16) | ⭕左レ❌(11,16,11) | Sp(12) | ⭕中下❌(11,16,11) | Sp(12) | ⭕右レ❌(11,16,11) | Space(16)
+                r2 = st.columns([16, 11,16,11, 12, 11,16,11, 12, 11,16,11, 16])
                 draw_flat_zone(r2[1], r2[2], r2[3], "左レ", "2p_ll", "2P")
-                draw_flat_zone(r2[4], r2[5], r2[6], "中下", "2p_cbl", "2P")
-                draw_flat_zone(r2[7], r2[8], r2[9], "右レ", "2p_rl", "2P")
+                draw_flat_zone(r2[5], r2[6], r2[7], "中下", "2p_cbl", "2P")
+                draw_flat_zone(r2[9], r2[10], r2[11], "右レ", "2p_rl", "2P")
 
                 # 🏀 第3行目：Space(16) | ⭕左45❌(11,16,11) | Sp(12) | ⭕中レ❌(11,16,11) | Sp(12) | ⭕右45❌(11,16,11) | Space(16)
                 r3 = st.columns([16, 11,16,11, 12, 11,16,11, 12, 11,16,11, 16])
