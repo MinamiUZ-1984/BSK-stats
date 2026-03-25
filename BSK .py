@@ -8,39 +8,40 @@ import altair as alt
 import uuid
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V24.0", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V25.0", layout="centered")
 
-# --- 0. CSS注入（ボタンサイズ統一・被り解消用） ---
+# --- 0. CSS注入（7マスグリッド統一・最背面ボタン・透過ラベル） ---
 st.markdown("""
     <style>
     .stTabs [data-baseweb="tab-list"] { gap: 10px; }
-    /* 列の隙間を極限まで詰める */
+    
+    /* ★修正：すべての列を「絶対に同じ幅（1/7）」に強制する */
     [data-testid="stHorizontalBlock"] { display: flex !important; flex-direction: row !important; width: 100% !important; gap: 2px !important; } 
     [data-testid="stHorizontalBlock"] > div { flex: 1 1 0% !important; min-width: 0 !important; }
     
-    /* ⭕❌ボタンの装飾 */
+    /* ⭕❌ボタンの設定（z-indexで背面に配置） */
     .stButton > button { width: 100% !important; padding: 2px 0px !important; font-size: 13px !important; font-weight: bold !important; min-height: 36px !important; margin-bottom: 0px !important; position: relative; z-index: 1; }
     [data-testid="stVerticalBlock"] { gap: 0.1rem !important; }
     
     div[data-testid="stTable"] table { font-size: 9px !important; width: 100% !important; }
     div[data-testid="stTable"] th, div[data-testid="stTable"] td { padding: 2px 1px !important; line-height: 1.1 !important; }
     
-    /* ★修正：見出し（【2Pエリア】など）の下に15pxの余白を作り、ボタンとの被りを完全解消！ */
-    .court-zone { text-align: center; font-size: 13px; font-weight: bold; color: white; background-color: #d35400; padding: 4px 0; border-radius: 4px; margin-top: 10px; margin-bottom: 15px; }
+    .court-zone { text-align: center; font-size: 12px; font-weight: bold; color: white; background-color: #d35400; padding: 3px 0; border-radius: 4px; margin-top: 8px; margin-bottom: 8px; }
     
-    /* 文字ラベル（エリア名）の設定 */
-    .label-wrapper { text-align: center; margin-bottom: -10px; position: relative; z-index: 10; pointer-events: none; }
+    /* ★修正：文字をボタンの上に被せ、かつクリックをすり抜けさせる魔法のCSS */
+    .label-wrapper { text-align: center; margin-bottom: -12px; position: relative; z-index: 10; pointer-events: none; }
     .area-label { 
-        background: rgba(255, 255, 255, 0.9); /* うっすら白背景でボタンの線を隠す */
+        background: rgba(255, 255, 255, 0.85); /* 半透明の白背景 */
         border: 1px solid #aaa; 
         border-radius: 3px;
         font-size: 10px; 
         font-weight: bold; 
         color: #111; 
-        padding: 1px 5px; 
+        padding: 0px 4px; 
         display: inline-block;
     }
     
+    /* 操作パネルの被り修正 */
     .center-panel-title { text-align:center; font-size:14px; font-weight:bold; color:#fff; background:#2c3e50; padding:6px; border-radius:5px 5px 0 0; margin-bottom: 0px; }
     
     .advice-box { background-color: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 5px solid #3498db; margin-bottom: 10px; }
@@ -294,6 +295,7 @@ def record(item, detail="-", res="成功", pts=0, team=None, name=None):
 # --- エリアボタン描画 ---
 def draw_zone(col, area_name, key_prefix, item_type):
     with col:
+        # ★透過ラベルをボタンの領域に重ねる
         st.markdown(f"<div class='label-wrapper'><div class='area-label'>{area_name}</div></div>", unsafe_allow_html=True)
         pts = 2 if item_type == "2P" else 3
         bc1, bc2 = st.columns(2)
@@ -343,52 +345,52 @@ def draw_action_menu():
             if it == "2P":
                 st.markdown("<div class='court-zone'>【 2P エリア 】</div>", unsafe_allow_html=True)
                 
-                # 🏀 第1行目（ベースライン側）：全行の合計を「12.0」に統一し、ボタン幅を必ず「2.5」に固定
-                # 構成: 左角(2.5) | 隙間(0.1) | 左下(2.5) | 🗑️(1.8) | 右下(2.5) | 隙間(0.1) | 右角(2.5) = 12.0
-                r1 = st.columns([2.5, 0.1, 2.5, 1.8, 2.5, 0.1, 2.5])
+                # 🏀★全行「7列」構成！これで全ボタンのサイズが1/7で完全に統一されます★🏀
+                
+                # 第1行目（リングとベースライン）
+                r1 = st.columns(7)
                 draw_zone(r1[0], "左角", "2p_lcor", "2P")
+                draw_zone(r1[2], "左下", "2p_lbl", "2P")
                 with r1[3]:
                     st.markdown("<div style='text-align:center; font-size:24px; margin-top:20px;'>🗑️</div>", unsafe_allow_html=True)
-                draw_zone(r1[2], "左下", "2p_lbl", "2P")
                 draw_zone(r1[4], "右下", "2p_rbl", "2P")
                 draw_zone(r1[6], "右角", "2p_rcor", "2P")
 
-                # 🏀 第2行目：左レ(2.5) | 中下(2.5) | 右レ(2.5)
-                # 構成: 隙間(1.1) | 左レ(2.5) | 隙間(1.15) | 中下(2.5) | 隙間(1.15) | 右レ(2.5) | 隙間(1.1) = 12.0
-                r2 = st.columns([1.1, 2.5, 1.15, 2.5, 1.15, 2.5, 1.1])
-                draw_zone(r2[1], "左レ", "2p_ll", "2P")
+                # 第2行目（ゴール下の中央）
+                r2 = st.columns(7)
                 draw_zone(r2[3], "中下", "2p_cbl", "2P")
-                draw_zone(r2[5], "右レ", "2p_rl", "2P")
 
-                # 🏀 第3行目：左45(2.5) | 中レ(2.5) | 右45(2.5)
-                # 構成: 隙間(1.6) | 左45(2.5) | 隙間(0.65) | 中レ(2.5) | 隙間(0.65) | 右45(2.5) | 隙間(1.6) = 12.0
-                r3 = st.columns([1.6, 2.5, 0.65, 2.5, 0.65, 2.5, 1.6])
-                draw_zone(r3[1], "左45", "2p_l45", "2P")
+                # 第3行目（レイアップアーチ）
+                r3 = st.columns(7)
+                draw_zone(r3[2], "左レ", "2p_ll", "2P")
                 draw_zone(r3[3], "中レ", "2p_cl", "2P")
-                draw_zone(r3[5], "右45", "2p_r45", "2P")
+                draw_zone(r3[4], "右レ", "2p_rl", "2P")
 
-                # 🏀 第4行目：中(2.5)
-                # 構成: 隙間(4.75) | 中(2.5) | 隙間(4.75) = 12.0
-                r4 = st.columns([4.75, 2.5, 4.75])
-                draw_zone(r4[1], "中", "2p_c", "2P")
+                # 第4行目（ミドルアーチ）
+                r4 = st.columns(7)
+                draw_zone(r4[1], "左45", "2p_l45", "2P")
+                draw_zone(r4[3], "中", "2p_c", "2P")
+                draw_zone(r4[5], "右45", "2p_r45", "2P")
 
             else: 
                 # 3P
                 st.markdown("<div style='text-align:center; font-size:35px; margin-top:-10px; margin-bottom:5px;'>🗑️🏀</div>", unsafe_allow_html=True)
                 st.markdown("<div style='text-align:center; font-size:16px; color:#ccc; margin-bottom:10px;'>🔺 ペイントエリア 🔺</div>", unsafe_allow_html=True)
-                st.markdown("<div class='court-zone'>【 3P エリア 】</div>", unsafe_allow_html=True) # ★修正：3Pエリアに名称変更
+                st.markdown("<div class='court-zone'>【 3P エリア 】</div>", unsafe_allow_html=True)
                 
-                # 🏀 3Pも同様の「合計12.0、ボタン2.5」グリッドで統一！
-                r3p_1 = st.columns([2.5, 7.0, 2.5])
+                # 第1行目（コーナー）
+                r3p_1 = st.columns(7)
                 draw_zone(r3p_1[0], "左角", "3p_lcor", "3P")
-                draw_zone(r3p_1[2], "右角", "3p_rcor", "3P")
+                draw_zone(r3p_1[6], "右角", "3p_rcor", "3P")
                 
-                r3p_2 = st.columns([1.6, 2.5, 3.8, 2.5, 1.6])
+                # 第2行目（45度）
+                r3p_2 = st.columns(7)
                 draw_zone(r3p_2[1], "左45", "3p_l45", "3P")
-                draw_zone(r3p_2[3], "右45", "3p_r45", "3P")
+                draw_zone(r3p_2[5], "右45", "3p_r45", "3P")
                 
-                r3p_3 = st.columns([4.75, 2.5, 4.75])
-                draw_zone(r3p_3[1], "中", "3p_c", "3P")
+                # 第3行目（トップ）
+                r3p_3 = st.columns(7)
+                draw_zone(r3p_3[3], "中", "3p_c", "3P")
 
             st.divider()
             if st.button("🔙 戻る", use_container_width=True): st.session_state.mode="項目選択"; safe_rerun()
@@ -702,6 +704,7 @@ else:
         
         st.radio("Q", ["1Q", "2Q", "3Q", "4Q", "OT"], horizontal=True, label_visibility="collapsed", key="current_q", on_change=safe_rerun)
 
+        # --- HOME チーム ---
         st.write(f"🔵 **{st.session_state.home_name}**")
         if not st.session_state.act_h: st.warning("サイドバーで選手を選んでください")
         else:
@@ -711,6 +714,7 @@ else:
                     st.session_state.tmp = {'player': p_num, 'team': st.session_state.home_name}; st.session_state.mode = "項目選択"; safe_rerun()
         if st.button(f"⏰ {st.session_state.home_name} TOUT", use_container_width=True): record("TOUT", team=st.session_state.home_name, name="TEAM"); safe_rerun()
 
+        # --- センター固定の操作パネル ---
         if st.session_state.mode != "選手選択":
             st.markdown("<div style='margin: 15px 0;'></div>", unsafe_allow_html=True)
             draw_action_menu()
@@ -718,6 +722,7 @@ else:
 
         st.divider()
 
+        # --- AWAY チーム ---
         st.write(f"🔴 **{st.session_state.away_name}**")
         if not st.session_state.act_a: st.warning("サイドバーで選手を選んでください")
         else:
