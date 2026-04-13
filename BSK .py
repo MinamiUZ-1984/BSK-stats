@@ -9,66 +9,23 @@ import uuid
 import streamlit.components.v1 as components
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V33.2", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V36.0", layout="centered")
 
-# --- 0. CSS注入（スクロール完全排除＆縦のズレを強制補正） ---
+# --- 0. CSS注入 ---
 st.markdown("""
     <style>
-    /* アプリの最大横幅をスマホサイズに固定 */
     .block-container { max-width: 450px !important; padding-left: 4px !important; padding-right: 4px !important; }
-    
     .stTabs [data-baseweb="tab-list"] { gap: 10px; }
+    [data-testid="column"] { padding: 0 1px !important; display: flex !important; flex-direction: column !important; justify-content: center !important; }
     
-    /* カラム間の隙間を極限まで詰めて横並びをキープ */
-    [data-testid="column"] { 
-        padding: 0 1px !important; 
-        display: flex !important; 
-        flex-direction: column !important; 
-        justify-content: center !important; 
-    }
-    
-    [data-testid="stHorizontalBlock"] { 
-        display: flex !important; 
-        flex-direction: row !important; 
-        width: 100% !important; 
-        gap: 0px !important; 
-        margin-bottom: 4px !important; 
-        align-items: center !important; 
-    } 
+    [data-testid="stHorizontalBlock"] { display: flex !important; flex-direction: row !important; width: 100% !important; gap: 0px !important; margin-bottom: 4px !important; align-items: center !important; } 
     [data-testid="stHorizontalBlock"] > div { flex: 1 1 0% !important; min-width: 0 !important; }
     
-    /* ⭕❌ボタンを正方形(48px)に固定 */
-    .stButton > button { 
-        width: 100% !important; 
-        height: 48px !important; 
-        min-height: 48px !important;
-        padding: 0px !important; 
-        font-size: 18px !important; 
-        font-weight: bold !important; 
-        margin: 0px !important; 
-        border-radius: 6px !important;
-    }
-    
+    .stButton > button { width: 100% !important; height: 48px !important; min-height: 48px !important; padding: 0px !important; font-size: 18px !important; font-weight: bold !important; margin: 0px !important; border-radius: 6px !important; }
     .stButton { margin: 0px !important; padding: 0px !important; }
     
-    /* 文字（ラベル）の高さをボタンと同じ「48px」に完全固定 */
-    .inline-lbl { 
-        background: #f0f2f6; 
-        color: #2c3e50; 
-        font-weight: bold; 
-        font-size: 11px; 
-        display: flex !important;
-        align-items: center !important;      
-        justify-content: center !important;  
-        height: 48px !important;             
-        margin: 0px !important; 
-        border: 1px solid #bdc3c7; 
-        border-radius: 4px !important;
-        white-space: nowrap;
-        box-sizing: border-box;
-    }
+    .inline-lbl { background: #f0f2f6; color: #2c3e50; font-weight: bold; font-size: 11px; display: flex !important; align-items: center !important; justify-content: center !important; height: 48px !important; margin: 0px !important; border: 1px solid #bdc3c7; border-radius: 4px !important; white-space: nowrap; box-sizing: border-box; }
     
-    /* 余白を徹底的に破壊 */
     .stMarkdown { width: 100% !important; margin: 0px !important; padding: 0px !important; }
     [data-testid="stMarkdownContainer"] { display: flex; justify-content: center; align-items: center; height: 100%; margin: 0px !important; }
     [data-testid="stMarkdownContainer"] p { margin: 0px !important; padding: 0px !important; width: 100%; }
@@ -86,6 +43,28 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# --- 精密スクロール ---
+def auto_scroll_to_target():
+    components.html(
+        """
+        <script>
+            setTimeout(function() {
+                const target = window.parent.document.getElementById('scroll-target');
+                if (target) {
+                    target.scrollIntoView({behavior: 'smooth', block: 'start'});
+                    setTimeout(function() {
+                        const parent = window.parent;
+                        const containers = parent.document.querySelectorAll('.main, [data-testid="stAppViewContainer"], [data-testid="stMain"]');
+                        containers.forEach(container => { container.scrollBy({ top: -20, behavior: 'smooth' }); });
+                        parent.scrollBy({ top: -20, behavior: 'smooth' });
+                    }, 200);
+                }
+            }, 400); 
+        </script>
+        """,
+        height=0
+    )
+
 # --- ユーザーIDの発行 ---
 if 'user_id' not in st.session_state:
     st.session_state.user_id = str(uuid.uuid4())
@@ -94,7 +73,7 @@ if 'read_only' not in st.session_state:
 
 # --- 使用者名ログイン＆ロック画面 ---
 if 'room_key' not in st.session_state:
-    st.title("🏀 松浪ミニバス 🏀 ✐スタッツ分析")
+    st.title("🏀 バスケ分析Pro")
     st.info("💡 **使用者名** を入力してスタートしてください。")
     room_input = st.text_input("使用者名（例：山田花子 など）")
     col1, col2 = st.columns(2)
@@ -328,7 +307,6 @@ def record(item, detail="-", res="成功", pts=0, team=None, name=None):
     st.session_state.history = pd.concat([st.session_state.history, new_row], ignore_index=True)
     st.session_state.mode = "選手選択"; st.toast(f"記録完了")
 
-# --- 「[⭕] [文字] [❌]」を同じ高さで一直線に美しく並べる描画関数 ---
 def draw_flat_zone(c_o, c_lbl, c_x, area_name, key_prefix, item_type):
     pts = 2 if item_type == "2P" else 3
     with c_o:
@@ -344,13 +322,12 @@ def draw_flat_zone(c_o, c_lbl, c_x, area_name, key_prefix, item_type):
             st.session_state.mode = "リバウンド選択"
             safe_rerun()
 
-# --- センターパネル用：アクションメニュー描画関数 ---
 def draw_action_menu():
     player_num = st.session_state.tmp.get('player')
     team_name = st.session_state.tmp.get('team')
     t_icon = "🔵" if team_name == st.session_state.home_name else "🔴"
     
-    st.markdown(f"<div class='center-panel-title'>{t_icon} {team_name} : #{player_num} 操作パネル</div>", unsafe_allow_html=True)
+    st.markdown(f"<div id='scroll-target'></div><div class='center-panel-title'>{t_icon} {team_name} : #{player_num} 操作パネル</div>", unsafe_allow_html=True)
     with st.container(border=True):
         if st.session_state.mode == "項目選択":
             c = st.columns(3)
@@ -375,13 +352,12 @@ def draw_action_menu():
             
             st.divider()
             if st.button("❌ キャンセル", use_container_width=True): st.session_state.mode="選手選択"; safe_rerun()
+            auto_scroll_to_target()
             
         elif st.session_state.mode == "エリア＆結果選択":
             it = st.session_state.tmp.get('item', '2P')
             if it == "2P":
                 st.markdown("<div style='text-align:center;'><span class='court-zone'>【 2P エリア 】</span></div>", unsafe_allow_html=True)
-                
-                # 🏀 第1行目
                 r1 = st.columns([11,16,11, 4, 11,16,11, 10, 11,16,11, 4, 11,16,11])
                 draw_flat_zone(r1[0], r1[1], r1[2], "左角", "2p_lcor", "2P")
                 draw_flat_zone(r1[4], r1[5], r1[6], "左下", "2p_lbl", "2P")
@@ -390,19 +366,16 @@ def draw_action_menu():
                 draw_flat_zone(r1[8], r1[9], r1[10], "右下", "2p_rbl", "2P")
                 draw_flat_zone(r1[12], r1[13], r1[14], "右角", "2p_rcor", "2P")
 
-                # 🏀 第2行目：3行目の縦列にピタリと合わせる！
                 r2 = st.columns([16, 11,16,11, 12, 11,16,11, 12, 11,16,11, 16])
                 draw_flat_zone(r2[1], r2[2], r2[3], "左レ", "2p_ll", "2P")
                 draw_flat_zone(r2[5], r2[6], r2[7], "中下", "2p_cbl", "2P")
                 draw_flat_zone(r2[9], r2[10], r2[11], "右レ", "2p_rl", "2P")
 
-                # 🏀 第3行目
                 r3 = st.columns([16, 11,16,11, 12, 11,16,11, 12, 11,16,11, 16])
                 draw_flat_zone(r3[1], r3[2], r3[3], "左45", "2p_l45", "2P")
                 draw_flat_zone(r3[5], r3[6], r3[7], "中レ", "2p_cl", "2P")
                 draw_flat_zone(r3[9], r3[10], r3[11], "右45", "2p_r45", "2P")
 
-                # 🏀 第4行目：★「中ミ」に変更し、3行目と全く同じ13分割グリッドを使って縦を完全に揃える！★
                 r4 = st.columns([16, 11,16,11, 12, 11,16,11, 12, 11,16,11, 16])
                 draw_flat_zone(r4[5], r4[6], r4[7], "中ミ", "2p_c", "2P")
 
@@ -412,7 +385,6 @@ def draw_action_menu():
                 st.markdown("<div style='text-align:center; font-size:16px; color:#ccc; margin-bottom:10px;'>🔺 ペイントエリア 🔺</div>", unsafe_allow_html=True)
                 st.markdown("<div style='text-align:center;'><span class='court-zone'>【 3P エリア 】</span></div>", unsafe_allow_html=True)
                 
-                # 🏀 3P エリア
                 r3p_1 = st.columns([11,16,11, 94, 11,16,11])
                 draw_flat_zone(r3p_1[0], r3p_1[1], r3p_1[2], "左角", "3p_lcor", "3P")
                 draw_flat_zone(r3p_1[4], r3p_1[5], r3p_1[6], "右角", "3p_rcor", "3P")
@@ -426,6 +398,7 @@ def draw_action_menu():
 
             st.divider()
             if st.button("🔙 戻る", use_container_width=True): st.session_state.mode="項目選択"; safe_rerun()
+            auto_scroll_to_target()
 
         elif st.session_state.mode == "結果選択": # FT用
             st.write(f"🎯 {st.session_state.tmp.get('area', 'FT')}")
@@ -440,6 +413,7 @@ def draw_action_menu():
                 safe_rerun()
             st.divider()
             if st.button("🔙 戻る", use_container_width=True): st.session_state.mode="項目選択"; safe_rerun()
+            auto_scroll_to_target()
 
         elif st.session_state.mode == "アシスト選択":
             st.write(f"🏀 得点！アシストは？")
@@ -453,6 +427,7 @@ def draw_action_menu():
                         safe_rerun()
             st.divider()
             if st.button("❌ アシストなし", use_container_width=True): st.session_state.mode = "選手選択"; safe_rerun()
+            auto_scroll_to_target()
 
         elif st.session_state.mode == "リバウンド選択":
             shooter_team = st.session_state.tmp.get('team')
@@ -476,6 +451,7 @@ def draw_action_menu():
             
             st.divider()
             if st.button("⏩ リバウンド記録なし（スキップ）", use_container_width=True): st.session_state.mode = "選手選択"; safe_rerun()
+            auto_scroll_to_target()
 
 def draw_stacked_chart(df, x_col, max_y):
     if df.empty: return
@@ -776,11 +752,34 @@ else:
     
     with tab_edit:
         st.header("🛠 修正")
+        st.info("💡 記録の「Q（クォーター）」を変更すると、**その記録から現在までのすべてのデータ**が自動で上書き修正されます！")
+        
         if not st.session_state.history.empty:
             for i, row in st.session_state.history.iloc[::-1].iterrows():
-                cols = st.columns([4, 1])
-                cols[0].write(f"{row['Q']}|{row['名前']}|{row['項目']}({row['詳細']})")
-                if cols[1].button("🗑️", key=f"del_{i}"): st.session_state.history = st.session_state.history.drop(i); safe_rerun()
+                cols = st.columns([2, 5, 1])
+                
+                q_opts = ["1Q", "2Q", "3Q", "4Q", "OT"]
+                curr_q = row['Q']
+                curr_idx = q_opts.index(curr_q) if curr_q in q_opts else 0
+                new_q = cols[0].selectbox("Q変更", q_opts, index=curr_idx, key=f"edit_q_{i}", label_visibility="collapsed")
+                
+                # ★大改修：Qを変更したら、そのID「以降」の全てのログを上書きドミノ倒し！★
+                if new_q != curr_q:
+                    target_id = row['id']
+                    # target_id以上のidを持つすべての記録のQを書き換える
+                    st.session_state.history.loc[st.session_state.history['id'] >= target_id, 'Q'] = new_q
+                    st.toast(f"✅ この記録以降をすべて {new_q} に修正しました！")
+                    save_state()
+                    safe_rerun()
+                
+                res_mark = "⭕" if row['結果'] == '成功' else ("❌" if row['結果'] == '失敗' else "")
+                pts_str = f"({row['点数']}点)" if row['点数'] > 0 else ""
+                cols[1].markdown(f"<div style='font-size:12px; margin-top:8px; line-height:1.2;'><b>{row['チーム']}</b><br>{row['名前']} | {row['項目']} {row['詳細']} {res_mark} {pts_str}</div>", unsafe_allow_html=True)
+                
+                if cols[2].button("🗑️", key=f"del_{i}"): 
+                    st.session_state.history = st.session_state.history.drop(i)
+                    save_state()
+                    safe_rerun()
 
 if not st.session_state.read_only and st.session_state.mode in ["選手選択", "アシスト選択", "リバウンド選択"]:
     save_state()
