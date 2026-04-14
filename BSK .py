@@ -6,10 +6,9 @@ import os
 import json
 import altair as alt
 import uuid
-import streamlit.components.v1 as components
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V36.0", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V37.0", layout="centered")
 
 # --- 0. CSS注入 ---
 st.markdown("""
@@ -43,28 +42,6 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 精密スクロール ---
-def auto_scroll_to_target():
-    components.html(
-        """
-        <script>
-            setTimeout(function() {
-                const target = window.parent.document.getElementById('scroll-target');
-                if (target) {
-                    target.scrollIntoView({behavior: 'smooth', block: 'start'});
-                    setTimeout(function() {
-                        const parent = window.parent;
-                        const containers = parent.document.querySelectorAll('.main, [data-testid="stAppViewContainer"], [data-testid="stMain"]');
-                        containers.forEach(container => { container.scrollBy({ top: -20, behavior: 'smooth' }); });
-                        parent.scrollBy({ top: -20, behavior: 'smooth' });
-                    }, 200);
-                }
-            }, 400); 
-        </script>
-        """,
-        height=0
-    )
-
 # --- ユーザーIDの発行 ---
 if 'user_id' not in st.session_state:
     st.session_state.user_id = str(uuid.uuid4())
@@ -73,7 +50,7 @@ if 'read_only' not in st.session_state:
 
 # --- 使用者名ログイン＆ロック画面 ---
 if 'room_key' not in st.session_state:
-    st.title("🏀 バスケ分析Pro🗑️　🗑️松浪ミニバス🏀")
+    st.title("🏀 バスケ分析Pro")
     st.info("💡 **使用者名** を入力してスタートしてください。")
     room_input = st.text_input("使用者名（例：山田花子 など）")
     col1, col2 = st.columns(2)
@@ -327,7 +304,7 @@ def draw_action_menu():
     team_name = st.session_state.tmp.get('team')
     t_icon = "🔵" if team_name == st.session_state.home_name else "🔴"
     
-    st.markdown(f"<div id='scroll-target'></div><div class='center-panel-title'>{t_icon} {team_name} : #{player_num} 操作パネル</div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='center-panel-title'>{t_icon} {team_name} : #{player_num} 操作パネル</div>", unsafe_allow_html=True)
     with st.container(border=True):
         if st.session_state.mode == "項目選択":
             c = st.columns(3)
@@ -352,7 +329,6 @@ def draw_action_menu():
             
             st.divider()
             if st.button("❌ キャンセル", use_container_width=True): st.session_state.mode="選手選択"; safe_rerun()
-            auto_scroll_to_target()
             
         elif st.session_state.mode == "エリア＆結果選択":
             it = st.session_state.tmp.get('item', '2P')
@@ -398,7 +374,6 @@ def draw_action_menu():
 
             st.divider()
             if st.button("🔙 戻る", use_container_width=True): st.session_state.mode="項目選択"; safe_rerun()
-            auto_scroll_to_target()
 
         elif st.session_state.mode == "結果選択": # FT用
             st.write(f"🎯 {st.session_state.tmp.get('area', 'FT')}")
@@ -413,7 +388,6 @@ def draw_action_menu():
                 safe_rerun()
             st.divider()
             if st.button("🔙 戻る", use_container_width=True): st.session_state.mode="項目選択"; safe_rerun()
-            auto_scroll_to_target()
 
         elif st.session_state.mode == "アシスト選択":
             st.write(f"🏀 得点！アシストは？")
@@ -427,7 +401,6 @@ def draw_action_menu():
                         safe_rerun()
             st.divider()
             if st.button("❌ アシストなし", use_container_width=True): st.session_state.mode = "選手選択"; safe_rerun()
-            auto_scroll_to_target()
 
         elif st.session_state.mode == "リバウンド選択":
             shooter_team = st.session_state.tmp.get('team')
@@ -451,7 +424,6 @@ def draw_action_menu():
             
             st.divider()
             if st.button("⏩ リバウンド記録なし（スキップ）", use_container_width=True): st.session_state.mode = "選手選択"; safe_rerun()
-            auto_scroll_to_target()
 
 def draw_stacked_chart(df, x_col, max_y):
     if df.empty: return
@@ -763,10 +735,8 @@ else:
                 curr_idx = q_opts.index(curr_q) if curr_q in q_opts else 0
                 new_q = cols[0].selectbox("Q変更", q_opts, index=curr_idx, key=f"edit_q_{i}", label_visibility="collapsed")
                 
-                # ★大改修：Qを変更したら、そのID「以降」の全てのログを上書きドミノ倒し！★
                 if new_q != curr_q:
                     target_id = row['id']
-                    # target_id以上のidを持つすべての記録のQを書き換える
                     st.session_state.history.loc[st.session_state.history['id'] >= target_id, 'Q'] = new_q
                     st.toast(f"✅ この記録以降をすべて {new_q} に修正しました！")
                     save_state()
