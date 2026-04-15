@@ -73,9 +73,9 @@ if 'read_only' not in st.session_state:
 
 # --- 使用者名ログイン＆ロック画面 ---
 if 'room_key' not in st.session_state:
-    st.title("🏀 バスケ分析Pro")
+    st.title("🏀 バスケ分析🗑️🏀 松浪ミニバス🗑️ ")
     st.info("💡 **使用者名** を入力してスタートしてください。")
-    room_input = st.text_input("使用者名（例：山田花子 など）")
+    room_input = st.text_input("使用者名（例：松田浪尾 など）")
     col1, col2 = st.columns(2)
     if col1.button("🚪 記録者として入る", type="primary", use_container_width=True):
         if room_input.strip() == "": st.error("使用者名を入力してください！")
