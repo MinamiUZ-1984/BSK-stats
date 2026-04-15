@@ -453,6 +453,7 @@ def draw_action_menu():
             if st.button("⏩ リバウンド記録なし（スキップ）", use_container_width=True): st.session_state.mode = "選手選択"; safe_rerun()
             auto_scroll_to_target()
 
+# --- 📊 共通グラフ描画関数群 ---
 def draw_stacked_chart(df, x_col, max_y):
     if df.empty: return
     df_m = df.reset_index().melt(id_vars=x_col, var_name='結果', value_name='回数')
@@ -491,6 +492,43 @@ def draw_simple_bar_chart(s, x_name, max_y, sort_order, color_range=None):
     )
     chart = alt.layer(bars, text).properties(height=200)
     st.altair_chart(chart, use_container_width=True)
+
+def get_shot_stats(df):
+    sh = df[df['項目'].isin(['2P', '3P', 'FT'])]
+    if sh.empty: return pd.DataFrame(columns=['成功', '失敗'], index=['2P', '3P', 'FT']).fillna(0)
+    stats = sh.groupby(['項目', '結果']).size().unstack(fill_value=0)
+    for c in ['成功', '失敗']:
+        if c not in stats.columns: stats[c] = 0
+    return stats[['成功', '失敗']].reindex(['2P', '3P', 'FT'], fill_value=0)
+
+def get_area_stats(df, target, areas_order):
+    sh = df[df['項目'] == target]
+    if sh.empty: return pd.DataFrame(columns=['成功', '失敗'], index=areas_order).fillna(0)
+    stats = sh.groupby(['詳細', '結果']).size().unstack(fill_value=0)
+    for c in ['成功', '失敗']:
+        if c not in stats.columns: stats[c] = 0
+    return stats[['成功', '失敗']].reindex(areas_order, fill_value=0)
+
+def get_reb_stats(df):
+    sh = df[df['項目'].isin(['OR', 'DR'])]
+    if sh.empty: return pd.Series({'OR':0, 'DR':0, 'Total':0})
+    stats = sh.groupby('項目').size()
+    for c in ['OR', 'DR']:
+        if c not in stats.index: stats[c] = 0
+    s = stats[['OR', 'DR']].copy()
+    s['Total'] = s.sum()
+    return s
+
+def get_to_stats(df):
+    sh = df[df['項目'] == 'TO']
+    to_cols = ['TV', 'DD', 'PM', '24S']
+    if sh.empty: return pd.Series({c:0 for c in to_cols + ['Total']})
+    stats = sh.groupby('詳細').size()
+    for c in to_cols:
+        if c not in stats.index: stats[c] = 0
+    s = stats[to_cols].copy()
+    s['Total'] = s.sum()
+    return s
 
 def generate_coach_advice(df, home_name, away_name):
     if df.empty: return "データが十分にありません。"
@@ -551,13 +589,6 @@ def draw_report_body():
     if sel_a != "全体": df_a_graph = df_a_graph[df_a_graph['名前'] == f"{sel_a}番"]
 
     st.subheader(f"① 全体シュート ({selected_q_graph})")
-    def get_shot_stats(df):
-        sh = df[df['項目'].isin(['2P', '3P', 'FT'])]
-        if sh.empty: return pd.DataFrame(columns=['成功', '失敗'], index=['2P', '3P', 'FT']).fillna(0)
-        stats = sh.groupby(['項目', '結果']).size().unstack(fill_value=0)
-        for c in ['成功', '失敗']:
-            if c not in stats.columns: stats[c] = 0
-        return stats[['成功', '失敗']].reindex(['2P', '3P', 'FT'], fill_value=0)
     s_stats_h = get_shot_stats(df_h_graph); s_stats_a = get_shot_stats(df_a_graph)
     max_y_overall = max(s_stats_h.sum(axis=1).max(), s_stats_a.sum(axis=1).max())
     max_y_overall = int(max_y_overall * 1.15) + 1 if max_y_overall > 0 else 5
@@ -573,15 +604,7 @@ def draw_report_body():
 
     st.subheader(f"② エリア別シュート分布 ({selected_q_graph})")
     area_target = st.radio("表示項目", ["2P", "3P"], horizontal=True, label_visibility="collapsed", key="area_target_radio")
-    def get_area_stats(df, target, areas_order):
-        sh = df[df['項目'] == target]
-        if sh.empty: return pd.DataFrame(columns=['成功', '失敗'], index=areas_order).fillna(0)
-        stats = sh.groupby(['詳細', '結果']).size().unstack(fill_value=0)
-        for c in ['成功', '失敗']:
-            if c not in stats.columns: stats[c] = 0
-        return stats[['成功', '失敗']].reindex(areas_order, fill_value=0)
-    
-    areas_order = ["左下", "中下", "右下", "左レ", "中レ", "右レ", "左角", "左45", "中", "右45", "右角"] if area_target == "2P" else ["左角", "左45", "中", "右45", "右角"]
+    areas_order = ["左下", "中下", "右下", "左レ", "中レ", "右レ", "左角", "左45", "中", "中ミ", "右45", "右角"] if area_target == "2P" else ["左角", "左45", "中", "右45", "右角"]
     a_stats_h = get_area_stats(df_h_graph, area_target, areas_order); a_stats_a = get_area_stats(df_a_graph, area_target, areas_order)
     max_y_area = max(a_stats_h.sum(axis=1).max(), a_stats_a.sum(axis=1).max())
     max_y_area = int(max_y_area * 1.15) + 1 if max_y_area > 0 else 5
@@ -596,14 +619,6 @@ def draw_report_body():
         else: st.caption("データなし")
 
     st.subheader(f"③ リバウンド ({selected_q_graph})")
-    def get_reb_stats(df):
-        sh = df[df['項目'].isin(['OR', 'DR'])]
-        if sh.empty: return pd.Series({'OR':0, 'DR':0, 'Total':0})
-        stats = sh.groupby('項目').size()
-        for c in ['OR', 'DR']:
-            if c not in stats.index: stats[c] = 0
-        s = stats[['OR', 'DR']]; s['Total'] = s.sum()
-        return s
     r_stats_h = get_reb_stats(df_h_graph); r_stats_a = get_reb_stats(df_a_graph)
     max_y_reb = max(r_stats_h.max(), r_stats_a.max())
     max_y_reb = int(max_y_reb * 1.15) + 1 if max_y_reb > 0 else 5
@@ -618,15 +633,6 @@ def draw_report_body():
         else: st.caption("データなし")
 
     st.subheader(f"④ ターンオーバー ({selected_q_graph})")
-    def get_to_stats(df):
-        sh = df[df['項目'] == 'TO']
-        to_cols = ['TV', 'DD', 'PM', '24S']
-        if sh.empty: return pd.Series({c:0 for c in to_cols + ['Total']})
-        stats = sh.groupby('詳細').size()
-        for c in to_cols:
-            if c not in stats.index: stats[c] = 0
-        s = stats[to_cols]; s['Total'] = s.sum()
-        return s
     to_stats_h = get_to_stats(df_h_graph); to_stats_a = get_to_stats(df_a_graph)
     max_y_to = max(to_stats_h.max(), to_stats_a.max())
     max_y_to = int(max_y_to * 1.15) + 1 if max_y_to > 0 else 5
@@ -680,24 +686,27 @@ def draw_report_body():
     csv_log = st.session_state.history.to_csv(index=False).encode('utf_8_sig')
     st.download_button("📜 ログCSV保存", csv_log, f"{st.session_state.tournament_name}_log.csv", "text/csv")
 
-# --- ★大改修：シーズン成績＆時系列分析タブ★ ---
+# --- ★大改修：シーズン成績タブ (グラフ・時系列ラベル対応)★ ---
 def draw_season_tab():
     st.header("📈 シーズン成績 ＆ 時系列推移")
-    st.write("過去の試合ログ(CSV)を複数読み込んで、指定したチームの累計スタッツや、選手個人の成長を分析できます。")
+    st.write("過去の試合ログ(CSV)を複数読み込んで、チームの累計スタッツや選手の成長を分析できます。")
     
     target_team = st.text_input("🔍 分析対象チーム名（HOME）を入力", value=st.session_state.home_name, key="season_target_team")
     
-    st.caption("※ ブラウザの仕様によりファイルの作成日時は読み取れません。**「ファイル名のアルファベット・数字順」**で自動的に古いものから並びます。（例: `01_試合.csv`, `02_試合.csv`）")
+    st.caption("※ファイル名のアルファベット・数字順（例: `01_試合.csv`, `02_試合.csv`）に自動で「1試合目」「2試合目」と時系列化されます。")
     season_files = st.file_uploader("複数のログCSVを選択してください", type=["csv"], accept_multiple_files=True, key="season_files")
     
     if season_files:
         dfs = []
-        for file in sorted(season_files, key=lambda x: x.name):
+        match_order = []
+        for idx, file in enumerate(sorted(season_files, key=lambda x: x.name)):
             try:
                 df = pd.read_csv(file)
                 df.columns = [str(c).replace('\ufeff', '').strip() for c in df.columns]
                 if 'チーム' in df.columns:
-                    df['Match_ID'] = file.name.replace('.csv', '') 
+                    m_id = f"{idx + 1}試合目"
+                    df['Match_ID'] = m_id
+                    match_order.append(m_id)
                     dfs.append(df)
             except: pass
                 
@@ -713,98 +722,8 @@ def draw_season_tab():
                 st.success(f"✅ {len(dfs)}試合分のデータを読み込みました！ (対象: **{target_team}**)")
                 s_players = sorted([p.replace('番','') for p in h_season_df['名前'].unique() if p != 'TEAM'], key=safe_sort_key)
                 
-                # --- ① 個人スタッツ・時系列推移 ---
-                st.subheader("① 個人スタッツ・時系列推移 (成長・課題分析)")
-                target_player = st.selectbox("分析する選手を選択してください", s_players)
-                
-                if target_player:
-                    pn = f"{target_player}番"
-                    p_season_df = h_season_df[h_season_df['名前'] == pn]
-                    
-                    ts_rows = []
-                    def fmt_stat_inline(m, a): return f"{m}/{a} ({(m/a*100):.0f}%)" if a > 0 else "-"
-                    
-                    def get_2p_stat(pdf_match, areas):
-                        target = pdf_match[(pdf_match['項目']=='2P') & (pdf_match['詳細'].isin(areas))]
-                        m = len(target[target['結果']=='成功'])
-                        a = len(target)
-                        return fmt_stat_inline(m, a)
-                    
-                    for match_id in p_season_df['Match_ID'].unique():
-                        pdf = p_season_df[p_season_df['Match_ID'] == match_id]
-                        
-                        m2i, m2a = len(pdf[(pdf['項目']=='2P') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='2P'])
-                        m3i, m3a = len(pdf[(pdf['項目']=='3P') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='3P'])
-                        fi, fa = len(pdf[(pdf['項目']=='FT') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='FT'])
-                        orb, drb = len(pdf[pdf['項目']=='OR']), len(pdf[pdf['項目']=='DR'])
-                        ast, stl, f = len(pdf[pdf['項目']=='AST']), len(pdf[pdf['項目']=='STL']), len(pdf[pdf['項目']=='Foul'])
-                        pts = pdf['点数'].sum()
-                        
-                        to = pdf[pdf['項目']=='TO']
-                        tv = len(to[to['詳細']=='TV'])
-                        dd = len(to[to['詳細']=='DD'])
-                        pm = len(to[to['詳細']=='PM'])
-                        s24 = len(to[to['詳細']=='24S'])
-                        
-                        in_paint = pdf[(pdf['項目']=='2P') & (pdf['詳細'].isin(['左下', '中下', '右下', '中']))]
-                        in_paint_i, in_paint_a = len(in_paint[in_paint['結果']=='成功']), len(in_paint)
-                        
-                        layup = pdf[(pdf['項目']=='2P') & (pdf['詳細'].isin(['左レ', '右レ']))]
-                        layup_i, layup_a = len(layup[layup['結果']=='成功']), len(layup)
-                        
-                        ts_rows.append({
-                            '試合名': match_id,
-                            'Pts': pts,
-                            'FG': fmt_stat_inline(m2i+m3i, m2a+m3a),
-                            '3P': fmt_stat_inline(m3i, m3a),
-                            'FT': fmt_stat_inline(fi, fa),
-                            'OR': orb,
-                            'DR': drb,
-                            'As': ast,
-                            'St': stl,
-                            'F': f,
-                            'TV': tv,
-                            'DD': dd,
-                            'PM(ﾊﾟｽﾐｽ)': pm,
-                            '24S': s24,
-                            '他TO': tv+dd+s24, # グラフ用に一応残す
-                            'G下(ｲﾝｻｲﾄﾞ)': fmt_stat_inline(in_paint_i, in_paint_a),
-                            'ﾚｲｱｯﾌﾟ': fmt_stat_inline(layup_i, layup_a),
-                            '左角(ﾐﾄﾞﾙ)': get_2p_stat(pdf, ['左角']),
-                            '左45(ﾐﾄﾞﾙ)': get_2p_stat(pdf, ['左45']),
-                            '中ミ(ﾐﾄﾞﾙ)': get_2p_stat(pdf, ['中ミ']),
-                            '右45(ﾐﾄﾞﾙ)': get_2p_stat(pdf, ['右45']),
-                            '右角(ﾐﾄﾞﾙ)': get_2p_stat(pdf, ['右角'])
-                        })
-                        
-                    ts_df = pd.DataFrame(ts_rows)
-                    st.dataframe(ts_df.set_index('試合名').drop(columns=['他TO']), use_container_width=True)
-                    st.caption("💡 スワイプで横スクロール可能です。「G下(ｲﾝｻｲﾄﾞ)」は左下/中下/右下/中の合算、「ﾚｲｱｯﾌﾟ」は左レ/右レの合算です。")
-
-                    # --- ★NEW：時系列グラフの表示★ ---
-                    st.markdown("##### 📉 スタッツ推移グラフ")
-                    numeric_cols = ['Pts', 'OR', 'DR', 'As', 'St', 'F', 'PM(ﾊﾟｽﾐｽ)', 'TV', 'DD', '24S']
-                    selected_stat = st.selectbox("グラフ化する項目を選択", numeric_cols, index=0)
-                    
-                    # ファイル名順（時系列）をそのまま維持してグラフ化
-                    match_order = ts_df['試合名'].tolist()
-                    
-                    line_chart = alt.Chart(ts_df).mark_line(point=True, color='#e74c3c', strokeWidth=3).encode(
-                        x=alt.X('試合名:N', sort=match_order, title='試合 (ファイル名順)', axis=alt.Axis(labelAngle=-45)),
-                        y=alt.Y(f'{selected_stat}:Q', title=selected_stat),
-                        tooltip=['試合名', selected_stat]
-                    ).properties(height=300)
-                    
-                    text = line_chart.mark_text(align='center', baseline='bottom', dy=-10, fontSize=14, fontWeight='bold').encode(
-                        text=f'{selected_stat}:Q'
-                    )
-                    
-                    st.altair_chart(line_chart + text, use_container_width=True)
-
-                st.divider()
-
-                # --- ② チーム累計スタッツ ---
-                st.subheader(f"② {target_team} 累計スタッツ")
+                # --- ① チーム全体スタッツ ---
+                st.subheader(f"① {target_team} チーム全体スタッツ")
                 rows = []
                 tp, tm2i, tm2a, tm3i, tm3a, tfi, tfa, tor, tdr, tast, tstl, tf, tto = 0,0,0,0,0,0,0,0,0,0,0,0,0
                 def fmt_stat(m, a): return f"{m}/{a}\n{(m/a*100):.0f}%" if a > 0 else "0/0\n0%"
@@ -813,7 +732,6 @@ def draw_season_tab():
                     pn = f"{p_num}番"
                     pdf = h_season_df[h_season_df['名前'] == pn]
                     games = pdf['Match_ID'].nunique()
-                    
                     m2i, m2a = len(pdf[(pdf['項目']=='2P') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='2P'])
                     m3i, m3a = len(pdf[(pdf['項目']=='3P') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='3P'])
                     fi, fa = len(pdf[(pdf['項目']=='FT') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='FT'])
@@ -839,7 +757,107 @@ def draw_season_tab():
                 st.dataframe(season_stats_df.set_index('#'), use_container_width=True)
                 
                 csv_season = season_stats_df.to_csv(index=False).encode('utf_8_sig')
-                st.download_button("📊 シーズンスタッツをCSV保存", csv_season, f"{target_team}_season_stats.csv", "text/csv")
+                st.download_button("📊 チーム累計スタッツをCSV保存", csv_season, f"{target_team}_season_stats.csv", "text/csv")
+                
+                st.divider()
+                
+                # --- ② 個人スタッツ ＆ 分析グラフ ---
+                st.subheader("② 個人スタッツ ＆ 分析グラフ")
+                target_scope = st.selectbox("分析対象（チーム全体・個人）を選択してください", ["チーム全体"] + s_players)
+                
+                if target_scope == "チーム全体":
+                    target_df = h_season_df
+                else:
+                    target_df = h_season_df[h_season_df['名前'] == f"{target_scope}番"]
+                    
+                # 📅 時系列スタッツ表
+                st.markdown(f"##### 📅 時系列スタッツ表 ({target_scope})")
+                ts_rows = []
+                def fmt_stat_inline(m, a): return f"{m}/{a} ({(m/a*100):.0f}%)" if a > 0 else "-"
+                def get_2p_stat(pdf_match, areas):
+                    target = pdf_match[(pdf_match['項目']=='2P') & (pdf_match['詳細'].isin(areas))]
+                    m = len(target[target['結果']=='成功']); a = len(target)
+                    return fmt_stat_inline(m, a)
+                
+                for match_id in match_order:
+                    pdf = target_df[target_df['Match_ID'] == match_id]
+                    if pdf.empty: continue
+                    
+                    m2i, m2a = len(pdf[(pdf['項目']=='2P') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='2P'])
+                    m3i, m3a = len(pdf[(pdf['項目']=='3P') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='3P'])
+                    fi, fa = len(pdf[(pdf['項目']=='FT') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='FT'])
+                    orb, drb = len(pdf[pdf['項目']=='OR']), len(pdf[pdf['項目']=='DR'])
+                    ast, stl, f = len(pdf[pdf['項目']=='AST']), len(pdf[pdf['項目']=='STL']), len(pdf[pdf['項目']=='Foul'])
+                    pts = pdf['点数'].sum()
+                    
+                    to = pdf[pdf['項目']=='TO']
+                    tv, dd, pm, s24 = len(to[to['詳細']=='TV']), len(to[to['詳細']=='DD']), len(to[to['詳細']=='PM']), len(to[to['詳細']=='24S'])
+                    
+                    in_paint = pdf[(pdf['項目']=='2P') & (pdf['詳細'].isin(['左下', '中下', '右下', '中']))]
+                    in_paint_i, in_paint_a = len(in_paint[in_paint['結果']=='成功']), len(in_paint)
+                    
+                    layup = pdf[(pdf['項目']=='2P') & (pdf['詳細'].isin(['左レ', '右レ']))]
+                    layup_i, layup_a = len(layup[layup['結果']=='成功']), len(layup)
+                    
+                    ts_rows.append({
+                        '試合名': match_id, 'Pts': pts,
+                        'FG': fmt_stat_inline(m2i+m3i, m2a+m3a), '3P': fmt_stat_inline(m3i, m3a), 'FT': fmt_stat_inline(fi, fa),
+                        'OR': orb, 'DR': drb, 'As': ast, 'St': stl, 'F': f,
+                        'TV': tv, 'DD': dd, 'PM(ﾊﾟｽﾐｽ)': pm, '24S': s24,
+                        'G下(ｲﾝｻｲﾄﾞ)': fmt_stat_inline(in_paint_i, in_paint_a),
+                        'ﾚｲｱｯﾌﾟ': fmt_stat_inline(layup_i, layup_a),
+                        '左角(ﾐﾄﾞﾙ)': get_2p_stat(pdf, ['左角']), '左45(ﾐﾄﾞﾙ)': get_2p_stat(pdf, ['左45']),
+                        '中ミ(ﾐﾄﾞﾙ)': get_2p_stat(pdf, ['中ミ']), '右45(ﾐﾄﾞﾙ)': get_2p_stat(pdf, ['右45']), '右角(ﾐﾄﾞﾙ)': get_2p_stat(pdf, ['右角'])
+                    })
+                    
+                ts_df = pd.DataFrame(ts_rows)
+                st.dataframe(ts_df.set_index('試合名'), use_container_width=True)
+                st.caption("💡 スワイプで横スクロール可能です。「G下」は左下/中下/右下/中の合算、「ﾚｲｱｯﾌﾟ」は左レ/右レの合算です。")
+
+                # 📊 累積スタッツ (棒グラフ)
+                st.markdown(f"##### 📊 累積スタッツ 棒グラフ ({target_scope})")
+                bc1, bc2 = st.columns(2)
+                with bc1:
+                    s_stats = get_shot_stats(target_df)
+                    max_y_overall = int(s_stats.sum(axis=1).max() * 1.15) + 1 if s_stats.sum().sum() > 0 else 5
+                    st.write("① シュート(2P/3P/FT)")
+                    if s_stats.sum().sum() > 0: draw_stacked_chart(s_stats, '項目', max_y_overall)
+                    else: st.caption("データなし")
+                    
+                    r_stats = get_reb_stats(target_df)
+                    max_y_reb = int(r_stats.max() * 1.15) + 1 if r_stats.sum() > 0 else 5
+                    st.write("③ リバウンド")
+                    if r_stats.sum() > 0: draw_simple_bar_chart(r_stats, '種類', max_y_reb, ['OR', 'DR', 'Total'], ['#ff9f43', '#3498db', '#2ecc71'])
+                    else: st.caption("データなし")
+                    
+                with bc2:
+                    a_stats_2p = get_area_stats(target_df, "2P", ["左下", "中下", "右下", "左レ", "中レ", "右レ", "左角", "左45", "中", "中ミ", "右45", "右角"])
+                    max_y_2p = int(a_stats_2p.sum(axis=1).max() * 1.15) + 1 if a_stats_2p.sum().sum() > 0 else 5
+                    st.write("② 2P エリア別")
+                    if a_stats_2p.sum().sum() > 0: draw_stacked_chart(a_stats_2p, '詳細', max_y_2p)
+                    else: st.caption("データなし")
+                    
+                    to_stats = get_to_stats(target_df)
+                    max_y_to = int(to_stats.max() * 1.15) + 1 if to_stats.sum() > 0 else 5
+                    st.write("④ ターンオーバー")
+                    if to_stats.sum() > 0: draw_simple_bar_chart(to_stats, '詳細', max_y_to, ['TV', 'DD', 'PM', '24S', 'Total'], ['#95a5a6', '#95a5a6', '#95a5a6', '#95a5a6', '#e74c3c'])
+                    else: st.caption("データなし")
+
+                # 📉 時系列推移 (折れ線グラフ)
+                st.markdown(f"##### 📉 時系列 折れ線グラフ ({target_scope})")
+                numeric_cols = ['Pts', 'OR', 'DR', 'As', 'St', 'F', 'PM(ﾊﾟｽﾐｽ)', 'TV', 'DD', '24S']
+                selected_stat = st.selectbox("グラフ化する項目を選択してください", numeric_cols, index=0)
+                
+                line_chart = alt.Chart(ts_df).mark_line(point=True, color='#e74c3c', strokeWidth=3).encode(
+                    x=alt.X('試合名:N', sort=match_order, title='', axis=alt.Axis(labelAngle=-45)),
+                    y=alt.Y(f'{selected_stat}:Q', title=selected_stat),
+                    tooltip=['試合名', selected_stat]
+                ).properties(height=300)
+                
+                text = line_chart.mark_text(align='center', baseline='bottom', dy=-10, fontSize=14, fontWeight='bold').encode(
+                    text=f'{selected_stat}:Q'
+                )
+                st.altair_chart(line_chart + text, use_container_width=True)
             else:
                 st.warning(f"アップロードされたファイルに「{target_team}」のデータが見つかりません。上の入力欄の名前を確認してください。")
 
