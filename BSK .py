@@ -6,9 +6,10 @@ import os
 import json
 import altair as alt
 import uuid
+import streamlit.components.v1 as components
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V37.0", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V39.0", layout="centered")
 
 # --- 0. CSS注入 ---
 st.markdown("""
@@ -42,6 +43,28 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# --- 精密スクロール ---
+def auto_scroll_to_target():
+    components.html(
+        """
+        <script>
+            setTimeout(function() {
+                const target = window.parent.document.getElementById('scroll-target');
+                if (target) {
+                    target.scrollIntoView({behavior: 'smooth', block: 'start'});
+                    setTimeout(function() {
+                        const parent = window.parent;
+                        const containers = parent.document.querySelectorAll('.main, [data-testid="stAppViewContainer"], [data-testid="stMain"]');
+                        containers.forEach(container => { container.scrollBy({ top: -20, behavior: 'smooth' }); });
+                        parent.scrollBy({ top: -20, behavior: 'smooth' });
+                    }, 200);
+                }
+            }, 400); 
+        </script>
+        """,
+        height=0
+    )
+
 # --- ユーザーIDの発行 ---
 if 'user_id' not in st.session_state:
     st.session_state.user_id = str(uuid.uuid4())
@@ -50,7 +73,7 @@ if 'read_only' not in st.session_state:
 
 # --- 使用者名ログイン＆ロック画面 ---
 if 'room_key' not in st.session_state:
-    st.title(" 🏀 バスケ分析🗑️　🗑️松浪ミニバス🏀")
+    st.title("🏀 バスケ分析Pro")
     st.info("💡 **使用者名** を入力してスタートしてください。")
     room_input = st.text_input("使用者名（例：山田花子 など）")
     col1, col2 = st.columns(2)
@@ -269,7 +292,7 @@ with st.sidebar:
         if st.session_state.act_a != valid_act_a: st.session_state.act_a = valid_act_a
         st.multiselect(f"🔴 {st.session_state.away_name} オンコート", options=all_a, key="act_a")
         st.divider()
-        with st.expander("📂 過去データを復元・確認 (CSV読込)"): st.file_uploader("詳細ログCSVを選択", type=["csv"], label_visibility="collapsed", key="uploaded_file", on_change=load_csv_data)
+        with st.expander("📂 過去データを復元・確認 (1試合用)"): st.file_uploader("詳細ログCSVを選択", type=["csv"], label_visibility="collapsed", key="uploaded_file", on_change=load_csv_data)
         st.divider()
         st.button("🚨 全データリセット (新規試合)", type="primary", use_container_width=True, on_click=reset_all_data)
     else:
@@ -304,7 +327,7 @@ def draw_action_menu():
     team_name = st.session_state.tmp.get('team')
     t_icon = "🔵" if team_name == st.session_state.home_name else "🔴"
     
-    st.markdown(f"<div class='center-panel-title'>{t_icon} {team_name} : #{player_num} 操作パネル</div>", unsafe_allow_html=True)
+    st.markdown(f"<div id='scroll-target'></div><div class='center-panel-title'>{t_icon} {team_name} : #{player_num} 操作パネル</div>", unsafe_allow_html=True)
     with st.container(border=True):
         if st.session_state.mode == "項目選択":
             c = st.columns(3)
@@ -329,6 +352,7 @@ def draw_action_menu():
             
             st.divider()
             if st.button("❌ キャンセル", use_container_width=True): st.session_state.mode="選手選択"; safe_rerun()
+            auto_scroll_to_target()
             
         elif st.session_state.mode == "エリア＆結果選択":
             it = st.session_state.tmp.get('item', '2P')
@@ -374,6 +398,7 @@ def draw_action_menu():
 
             st.divider()
             if st.button("🔙 戻る", use_container_width=True): st.session_state.mode="項目選択"; safe_rerun()
+            auto_scroll_to_target()
 
         elif st.session_state.mode == "結果選択": # FT用
             st.write(f"🎯 {st.session_state.tmp.get('area', 'FT')}")
@@ -388,6 +413,7 @@ def draw_action_menu():
                 safe_rerun()
             st.divider()
             if st.button("🔙 戻る", use_container_width=True): st.session_state.mode="項目選択"; safe_rerun()
+            auto_scroll_to_target()
 
         elif st.session_state.mode == "アシスト選択":
             st.write(f"🏀 得点！アシストは？")
@@ -401,6 +427,7 @@ def draw_action_menu():
                         safe_rerun()
             st.divider()
             if st.button("❌ アシストなし", use_container_width=True): st.session_state.mode = "選手選択"; safe_rerun()
+            auto_scroll_to_target()
 
         elif st.session_state.mode == "リバウンド選択":
             shooter_team = st.session_state.tmp.get('team')
@@ -424,6 +451,7 @@ def draw_action_menu():
             
             st.divider()
             if st.button("⏩ リバウンド記録なし（スキップ）", use_container_width=True): st.session_state.mode = "選手選択"; safe_rerun()
+            auto_scroll_to_target()
 
 def draw_stacked_chart(df, x_col, max_y):
     if df.empty: return
@@ -652,8 +680,132 @@ def draw_report_body():
     csv_log = st.session_state.history.to_csv(index=False).encode('utf_8_sig')
     st.download_button("📜 ログCSV保存", csv_log, f"{st.session_state.tournament_name}_log.csv", "text/csv")
 
+# --- ★大改修：シーズン成績＆時系列分析タブ★ ---
+def draw_season_tab():
+    st.header("📈 シーズン成績 ＆ 時系列推移")
+    st.write(f"過去の試合ログ(CSV)を複数読み込んで、**{st.session_state.home_name}** の累計スタッツや、選手個人の成長を分析できます。")
+    season_files = st.file_uploader("複数のログCSVを選択してください (ファイル名順に時系列になります)", type=["csv"], accept_multiple_files=True, key="season_files")
+    
+    if season_files:
+        dfs = []
+        # ファイル名で並び替えて時系列を維持
+        for file in sorted(season_files, key=lambda x: x.name):
+            try:
+                df = pd.read_csv(file)
+                df.columns = [str(c).replace('\ufeff', '').strip() for c in df.columns]
+                if 'チーム' in df.columns:
+                    df['Match_ID'] = file.name.replace('.csv', '') 
+                    dfs.append(df)
+            except: pass
+                
+        if dfs:
+            season_df = pd.concat(dfs, ignore_index=True)
+            season_df['点数'] = pd.to_numeric(season_df['点数'], errors='coerce').fillna(0).astype(int)
+            season_df['チーム'] = season_df['チーム'].astype(str).str.strip()
+            season_df['名前'] = season_df['名前'].astype(str).str.strip()
+            
+            h_season_df = season_df[season_df['チーム'] == st.session_state.home_name]
+            
+            if not h_season_df.empty:
+                st.success(f"✅ {len(dfs)}試合分のデータを読み込みました！")
+                
+                s_players = sorted([p.replace('番','') for p in h_season_df['名前'].unique() if p != 'TEAM'], key=safe_sort_key)
+                
+                # --- ① チーム累計スタッツ ---
+                st.subheader("① チーム累計スタッツ")
+                rows = []
+                tp, tm2i, tm2a, tm3i, tm3a, tfi, tfa, tor, tdr, tast, tstl, tf, tto = 0,0,0,0,0,0,0,0,0,0,0,0,0
+                def fmt_stat(m, a): return f"{m}/{a}\n{(m/a*100):.0f}%" if a > 0 else "0/0\n0%"
+                
+                for p_num in s_players:
+                    pn = f"{p_num}番"
+                    pdf = h_season_df[h_season_df['名前'] == pn]
+                    games = pdf['Match_ID'].nunique()
+                    
+                    m2i, m2a = len(pdf[(pdf['項目']=='2P') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='2P'])
+                    m3i, m3a = len(pdf[(pdf['項目']=='3P') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='3P'])
+                    fi, fa = len(pdf[(pdf['項目']=='FT') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='FT'])
+                    orb, drb = len(pdf[pdf['項目']=='OR']), len(pdf[pdf['項目']=='DR'])
+                    ast, stl, f, to = len(pdf[pdf['項目']=='AST']), len(pdf[pdf['項目']=='STL']), len(pdf[pdf['項目']=='Foul']), len(pdf[pdf['項目']=='TO'])
+                    pts = pdf['点数'].sum()
+                    
+                    tp+=pts; tm2i+=m2i; tm2a+=m2a; tm3i+=m3i; tm3a+=m3a; tfi+=fi; tfa+=fa; tor+=orb; tdr+=drb; tast+=ast; tstl+=stl; tf+=f; tto+=to
+                    
+                    rows.append({
+                        '#': p_num, '試合': games, 'Pts': pts, 'AVG': f"{(pts/games):.1f}" if games > 0 else "0.0",
+                        'FG(M/A)': fmt_stat(m2i+m3i, m2a+m3a), '3P(M/A)': fmt_stat(m3i, m3a), 'FT(M/A)': fmt_stat(fi, fa),
+                        'REB(D/O)': f"{drb+orb}\n({drb}/{orb})", 'As': ast, 'St': stl, 'F': f, 'TO': to
+                    })
+                
+                total_games = h_season_df['Match_ID'].nunique()
+                rows.append({
+                    '#': 'Total', '試合': total_games, 'Pts': tp, 'AVG': f"{(tp/total_games):.1f}" if total_games > 0 else "0.0",
+                    'FG(M/A)': fmt_stat(tm2i+tm3i, tm2a+tm3a), '3P(M/A)': fmt_stat(tm3i, tm3a), 'FT(M/A)': fmt_stat(tfi, tfa),
+                    'REB(D/O)': f"{tdr+tor}\n({tdr}/{tor})", 'As': tast, 'St': tstl, 'F': tf, 'TO': tto
+                })
+                season_stats_df = pd.DataFrame(rows)
+                st.dataframe(season_stats_df.set_index('#'), use_container_width=True)
+                
+                st.divider()
+                
+                # --- ② 個人スタッツ・時系列推移（NEW!） ---
+                st.subheader("② 個人スタッツ・時系列推移 (成長・課題分析)")
+                target_player = st.selectbox("分析する選手を選択してください", s_players)
+                
+                if target_player:
+                    pn = f"{target_player}番"
+                    p_season_df = h_season_df[h_season_df['名前'] == pn]
+                    
+                    ts_rows = []
+                    # 横スクロールで見やすいように1行で表示
+                    def fmt_stat_inline(m, a): return f"{m}/{a} ({(m/a*100):.0f}%)" if a > 0 else "-"
+                    
+                    for match_id in p_season_df['Match_ID'].unique():
+                        pdf = p_season_df[p_season_df['Match_ID'] == match_id]
+                        
+                        m2i, m2a = len(pdf[(pdf['項目']=='2P') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='2P'])
+                        m3i, m3a = len(pdf[(pdf['項目']=='3P') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='3P'])
+                        fi, fa = len(pdf[(pdf['項目']=='FT') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='FT'])
+                        orb, drb = len(pdf[pdf['項目']=='OR']), len(pdf[pdf['項目']=='DR'])
+                        ast, stl, f = len(pdf[pdf['項目']=='AST']), len(pdf[pdf['項目']=='STL']), len(pdf[pdf['項目']=='Foul'])
+                        to = pdf[pdf['項目']=='TO']
+                        tv, dd, pm, s24 = len(to[to['詳細']=='TV']), len(to[to['詳細']=='DD']), len(to[to['詳細']=='PM']), len(to[to['詳細']=='24S'])
+                        pts = pdf['点数'].sum()
+                        
+                        # 分析用特化スタッツ：インサイド（ゴール下）
+                        in_paint = pdf[(pdf['項目']=='2P') & (pdf['詳細'].isin(['左下', '中下', '右下', '中', '中ミ']))]
+                        in_paint_i, in_paint_a = len(in_paint[in_paint['結果']=='成功']), len(in_paint)
+                        
+                        # 分析用特化スタッツ：レイアップ
+                        layup = pdf[(pdf['項目']=='2P') & (pdf['詳細'].isin(['左レ', '右レ']))]
+                        layup_i, layup_a = len(layup[layup['結果']=='成功']), len(layup)
+                        
+                        ts_rows.append({
+                            '試合名': match_id,
+                            'Pts': pts,
+                            'FG': fmt_stat_inline(m2i+m3i, m2a+m3a),
+                            '3P': fmt_stat_inline(m3i, m3a),
+                            'FT': fmt_stat_inline(fi, fa),
+                            'OR': orb,
+                            'DR': drb,
+                            'As': ast,
+                            'St': stl,
+                            'F': f,
+                            'PM(ﾊﾟｽﾐｽ)': pm,
+                            '他TO': tv+dd+s24,
+                            'G下(ｲﾝｻｲﾄﾞ)': fmt_stat_inline(in_paint_i, in_paint_a),
+                            'ﾚｲｱｯﾌﾟ': fmt_stat_inline(layup_i, layup_a)
+                        })
+                        
+                    ts_df = pd.DataFrame(ts_rows)
+                    st.dataframe(ts_df.set_index('試合名'), use_container_width=True)
+                    st.caption("💡 スワイプで横スクロール可能です。「G下(ｲﾝｻｲﾄﾞ)」は左下/中下/右下/中/中ミの合算、「ﾚｲｱｯﾌﾟ」は左レ/右レの合算確率です。")
+            else:
+                st.warning(f"アップロードされたファイルに「{st.session_state.home_name}」のデータが見つかりません。")
+
+# --- メイン画面描画 ---
 if st.session_state.read_only:
-    tab_report, = st.tabs(["📄 ライブ統計レポート"])
+    tab_report, tab_season = st.tabs(["📄 ライブ統計レポート", "📈 シーズン成績"])
     with tab_report:
         if st.button("🔄 記録者の最新データを読み込む", use_container_width=True, type="primary"):
             if os.path.exists(LOG_FILE):
@@ -672,9 +824,11 @@ if st.session_state.read_only:
         if st.session_state.history.empty: st.info("データがありません。「最新データを読み込む」ボタンを押してください。")
         elif not st.session_state.report_trigger: st.info("上のボタンを押すと最新のグラフが表示されます。")
         else: draw_report_body()
+    with tab_season:
+        draw_season_tab()
 
 else:
-    tab_input, tab_report, tab_edit = st.tabs(["✍️ 記録入力", "📄 統計レポート", "🛠 修正"])
+    tab_input, tab_report, tab_season, tab_edit = st.tabs(["✍️ 記録入力", "📄 試合レポート", "📈 シーズン成績", "🛠 修正"])
     with tab_input:
         if not st.session_state.history.empty:
             try:
@@ -684,7 +838,6 @@ else:
         
         st.radio("Q", ["1Q", "2Q", "3Q", "4Q", "OT"], horizontal=True, label_visibility="collapsed", key="current_q", on_change=safe_rerun)
 
-        # --- HOME チーム ---
         st.write(f"🔵 **{st.session_state.home_name}**")
         if not st.session_state.act_h: st.warning("サイドバーで選手を選んでください")
         else:
@@ -694,7 +847,6 @@ else:
                     st.session_state.tmp = {'player': p_num, 'team': st.session_state.home_name}; st.session_state.mode = "項目選択"; safe_rerun()
         if st.button(f"⏰ {st.session_state.home_name} TOUT", use_container_width=True): record("TOUT", team=st.session_state.home_name, name="TEAM"); safe_rerun()
 
-        # --- センター固定の操作パネル ---
         if st.session_state.mode != "選手選択":
             st.markdown("<div style='margin: 15px 0;'></div>", unsafe_allow_html=True)
             draw_action_menu()
@@ -702,7 +854,6 @@ else:
 
         st.divider()
 
-        # --- AWAY チーム ---
         st.write(f"🔴 **{st.session_state.away_name}**")
         if not st.session_state.act_a: st.warning("サイドバーで選手を選んでください")
         else:
@@ -721,6 +872,9 @@ else:
                     st.session_state.report_trigger = True
                     st.rerun()
             else: draw_report_body()
+            
+    with tab_season:
+        draw_season_tab()
     
     with tab_edit:
         st.header("🛠 修正")
