@@ -10,7 +10,7 @@ import streamlit.components.v1 as components
 import datetime
 
 # ページ設定
-st.set_page_config(page_title="松浪ミニバス分析 V45.1", layout="centered")
+st.set_page_config(page_title="松浪ミニバス分析 V47.0", layout="centered")
 
 # --- 0. CSS注入 ---
 st.markdown("""
@@ -44,8 +44,6 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 精密スクロール除去済み（勝手に動かないように修正済み） ---
-
 # --- ユーザーIDの発行 ---
 if 'user_id' not in st.session_state:
     st.session_state.user_id = str(uuid.uuid4())
@@ -56,7 +54,7 @@ if 'read_only' not in st.session_state:
 if 'room_key' not in st.session_state:
     st.title("🏀 バスケ分析🗑️🏀 松浪ミニバス🗑️ ")
     st.info("💡 **使用者名** を入力してスタートしてください。")
-    room_input = st.text_input("使用者名（例：山田花子 など）")
+    room_input = st.text_input("使用者名（例：記録担当A など）")
     col1, col2 = st.columns(2)
     if col1.button("🚪 記録者として入る", type="primary", use_container_width=True):
         if room_input.strip() == "": st.error("使用者名を入力してください！")
@@ -102,7 +100,7 @@ def save_state():
         'match_date': st.session_state.get('match_date', datetime.date.today().strftime("%Y%m%d")),
         'match_number': st.session_state.get('match_number', '01'),
         'tournament_name': st.session_state.get('tournament_name', '練習試合'),
-        'home_name': st.session_state.get('home_name', '松浪ミニバス'),
+        'home_name': st.session_state.get('home_name', '松浪'),
         'away_name': st.session_state.get('away_name', 'AWAY'),
         'r_str_h': st.session_state.get('r_str_h', '4,5,6,7,8,9,10,11,12,13,14,15'),
         'act_h': st.session_state.get('act_h', ['4','5','6','7','8']),
@@ -188,11 +186,11 @@ if 'app_init' not in st.session_state:
         except: pass
 
 if 'history' not in st.session_state: st.session_state.history = pd.DataFrame(columns=['id', 'Q', 'チーム', '名前', '項目', '詳細', '結果', '点数'])
-# 初期値設定（松浪ミニバス固定）
 if 'match_date' not in st.session_state: st.session_state.match_date = datetime.date.today().strftime("%Y%m%d")
 if 'match_number' not in st.session_state: st.session_state.match_number = "01"
 if 'tournament_name' not in st.session_state: st.session_state.tournament_name = "練習試合"
-if 'home_name' not in st.session_state: st.session_state.home_name = "松浪ミニバス"
+# ★デフォルトHOMEチーム名を「松浪」に設定★
+if 'home_name' not in st.session_state: st.session_state.home_name = "松浪"
 if 'away_name' not in st.session_state: st.session_state.away_name = "AWAY"
 if 'r_str_h' not in st.session_state: st.session_state.r_str_h = "4,5,6,7,8,9,10,11,12,13,14,15"
 if 'act_h' not in st.session_state: st.session_state.act_h = ["4","5","6","7","8"]
@@ -202,9 +200,6 @@ if 'current_q' not in st.session_state: st.session_state.current_q = "1Q"
 if 'mode' not in st.session_state: st.session_state.mode = "選手選択"
 if 'tmp' not in st.session_state: st.session_state.tmp = {}
 if 'report_trigger' not in st.session_state: st.session_state.report_trigger = False
-
-# 強制的にHOMEを松浪ミニバスにする
-st.session_state.home_name = "松浪ミニバス"
 
 def load_csv_data():
     if st.session_state.uploaded_file is not None:
@@ -231,8 +226,7 @@ def load_csv_data():
                         csv_a = st.session_state.away_name; csv_h = [t for t in teams if t != csv_a][0]
                     else:
                         csv_h, csv_a = teams[0], teams[1]
-                st.session_state.home_name = "松浪ミニバス" # 復元時も強制
-                st.session_state.away_name = csv_a
+                st.session_state.home_name = csv_h; st.session_state.away_name = csv_a
                 def extract_exact_players(team_name):
                     p_list = df[df['チーム'] == team_name]['名前'].dropna().unique()
                     res = []
@@ -261,13 +255,14 @@ with st.sidebar:
     if not st.session_state.read_only:
         st.header("🏆 試合設定")
         col_date, col_num = st.columns([2, 1])
-        col_date.text_input("📅 日時 (例: 20240415)", key="match_date")
+        # ★大改修：日時の例を削除し、高さを完全に揃える★
+        col_date.text_input("📅 日時", key="match_date")
         col_num.text_input("🔢 試合目", key="match_number")
         st.text_input("📝 大会名", key="tournament_name")
         st.divider()
         
-        # ★大改修：自チーム名は入力不可にし、松浪ミニバスで固定表示★
-        st.info(f"🔵 自チーム: **{st.session_state.home_name}**")
+        # ★大改修：自チーム名入力欄を復活（デフォルトは「松浪」）★
+        st.text_input("自チーム名", key="home_name")
         st.text_input(f"🔵 新規選手を追加", placeholder="例: 13。", key="new_h_input")
         st.button("＋追加＆出場", key="add_h", use_container_width=True, on_click=add_h_player)
         with st.expander(f"👥 {st.session_state.home_name} 名簿を手動編集"): st.text_area("全背番号 (カンマ区切り)", key="r_str_h")
@@ -276,7 +271,8 @@ with st.sidebar:
         if st.session_state.act_h != valid_act_h: st.session_state.act_h = valid_act_h
         st.multiselect(f"🔵 {st.session_state.home_name} オンコート", options=all_h, key="act_h")
         st.divider()
-        
+        st.button("🔁 HOMEとAWAYを入れ替える", use_container_width=True, on_click=swap_teams)
+        st.divider()
         st.text_input("相手チーム名", key="away_name")
         st.text_input(f"🔴 新規選手を追加", placeholder="例: ⑨", key="new_a_input")
         st.button("＋追加＆出場", key="add_a", use_container_width=True, on_click=add_a_player)
@@ -321,7 +317,7 @@ def draw_action_menu():
     team_name = st.session_state.tmp.get('team')
     t_icon = "🔵" if team_name == st.session_state.home_name else "🔴"
     
-    st.markdown(f"<div id='scroll-target'></div><div class='center-panel-title'>{t_icon} {team_name} : #{player_num} 操作パネル</div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='center-panel-title'>{t_icon} {team_name} : #{player_num} 操作パネル</div>", unsafe_allow_html=True)
     with st.container(border=True):
         if st.session_state.mode == "項目選択":
             c = st.columns(3)
@@ -681,10 +677,10 @@ def draw_report_body():
 # --- シーズン成績タブ ---
 def draw_season_tab():
     st.header("📈 シーズン成績 ＆ 時系列推移")
-    st.write(f"過去の試合ログ(CSV)を複数読み込んで、**{st.session_state.home_name}** の累計スタッツや成長を分析します。")
+    st.write("過去の試合ログ(CSV)を複数読み込んで、チームの累計スタッツや選手の成長を分析できます。")
     
-    # 松浪ミニバス固定のため、入力欄を消去して内部で固定
-    target_team = "松浪ミニバス"
+    # ★大改修：分析対象チーム名を現在設定されているhome_nameをデフォルトにして表示★
+    target_team = st.text_input("🔍 分析対象チーム名（HOME）を入力", value=st.session_state.home_name, key="season_target_team")
     
     st.caption("※ファイル名のアルファベット・数字順（例: `20240415_01_試合.csv`）に自動で時系列化されます。")
     season_files = st.file_uploader("複数のログCSVを選択してください", type=["csv"], accept_multiple_files=True, key="season_files")
@@ -855,7 +851,7 @@ def draw_season_tab():
                 )
                 st.altair_chart(line_chart + text, use_container_width=True)
             else:
-                st.warning(f"アップロードされたファイルに「{target_team}」のデータが見つかりません。")
+                st.warning(f"アップロードされたファイルに「{target_team}」のデータが見つかりません。上の入力欄の名前を確認してください。")
 
 # --- メイン画面描画 ---
 if st.session_state.read_only:
