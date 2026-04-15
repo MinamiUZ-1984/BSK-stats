@@ -9,7 +9,7 @@ import uuid
 import streamlit.components.v1 as components
 
 # ページ設定
-st.set_page_config(page_title="バスケ分析Pro V39.0", layout="centered")
+st.set_page_config(page_title="バスケ分析Pro V40.0", layout="centered")
 
 # --- 0. CSS注入 ---
 st.markdown("""
@@ -680,15 +680,18 @@ def draw_report_body():
     csv_log = st.session_state.history.to_csv(index=False).encode('utf_8_sig')
     st.download_button("📜 ログCSV保存", csv_log, f"{st.session_state.tournament_name}_log.csv", "text/csv")
 
-# --- ★大改修：シーズン成績＆時系列分析タブ★ ---
+# --- シーズン成績＆時系列分析タブ ---
 def draw_season_tab():
     st.header("📈 シーズン成績 ＆ 時系列推移")
-    st.write(f"過去の試合ログ(CSV)を複数読み込んで、**{st.session_state.home_name}** の累計スタッツや、選手個人の成長を分析できます。")
+    st.write("過去の試合ログ(CSV)を複数読み込んで、指定したチームの累計スタッツや、選手個人の成長を分析できます。")
+    
+    # ★大改修：分析対象のチーム名を自由に入力できる欄を追加！★
+    target_team = st.text_input("🔍 分析対象チーム名（HOME）を入力", value=st.session_state.home_name, key="season_target_team")
+    
     season_files = st.file_uploader("複数のログCSVを選択してください (ファイル名順に時系列になります)", type=["csv"], accept_multiple_files=True, key="season_files")
     
     if season_files:
         dfs = []
-        # ファイル名で並び替えて時系列を維持
         for file in sorted(season_files, key=lambda x: x.name):
             try:
                 df = pd.read_csv(file)
@@ -704,15 +707,16 @@ def draw_season_tab():
             season_df['チーム'] = season_df['チーム'].astype(str).str.strip()
             season_df['名前'] = season_df['名前'].astype(str).str.strip()
             
-            h_season_df = season_df[season_df['チーム'] == st.session_state.home_name]
+            # ★入力された target_team の名前でデータを絞り込み！★
+            h_season_df = season_df[season_df['チーム'] == target_team]
             
             if not h_season_df.empty:
-                st.success(f"✅ {len(dfs)}試合分のデータを読み込みました！")
+                st.success(f"✅ {len(dfs)}試合分のデータを読み込みました！ (対象: **{target_team}**)")
                 
                 s_players = sorted([p.replace('番','') for p in h_season_df['名前'].unique() if p != 'TEAM'], key=safe_sort_key)
                 
                 # --- ① チーム累計スタッツ ---
-                st.subheader("① チーム累計スタッツ")
+                st.subheader(f"① {target_team} 累計スタッツ")
                 rows = []
                 tp, tm2i, tm2a, tm3i, tm3a, tfi, tfa, tor, tdr, tast, tstl, tf, tto = 0,0,0,0,0,0,0,0,0,0,0,0,0
                 def fmt_stat(m, a): return f"{m}/{a}\n{(m/a*100):.0f}%" if a > 0 else "0/0\n0%"
@@ -746,9 +750,12 @@ def draw_season_tab():
                 season_stats_df = pd.DataFrame(rows)
                 st.dataframe(season_stats_df.set_index('#'), use_container_width=True)
                 
+                csv_season = season_stats_df.to_csv(index=False).encode('utf_8_sig')
+                st.download_button("📊 シーズンスタッツをCSV保存", csv_season, f"{target_team}_season_stats.csv", "text/csv")
+                
                 st.divider()
                 
-                # --- ② 個人スタッツ・時系列推移（NEW!） ---
+                # --- ② 個人スタッツ・時系列推移 ---
                 st.subheader("② 個人スタッツ・時系列推移 (成長・課題分析)")
                 target_player = st.selectbox("分析する選手を選択してください", s_players)
                 
@@ -757,7 +764,6 @@ def draw_season_tab():
                     p_season_df = h_season_df[h_season_df['名前'] == pn]
                     
                     ts_rows = []
-                    # 横スクロールで見やすいように1行で表示
                     def fmt_stat_inline(m, a): return f"{m}/{a} ({(m/a*100):.0f}%)" if a > 0 else "-"
                     
                     for match_id in p_season_df['Match_ID'].unique():
@@ -772,11 +778,9 @@ def draw_season_tab():
                         tv, dd, pm, s24 = len(to[to['詳細']=='TV']), len(to[to['詳細']=='DD']), len(to[to['詳細']=='PM']), len(to[to['詳細']=='24S'])
                         pts = pdf['点数'].sum()
                         
-                        # 分析用特化スタッツ：インサイド（ゴール下）
                         in_paint = pdf[(pdf['項目']=='2P') & (pdf['詳細'].isin(['左下', '中下', '右下', '中', '中ミ']))]
                         in_paint_i, in_paint_a = len(in_paint[in_paint['結果']=='成功']), len(in_paint)
                         
-                        # 分析用特化スタッツ：レイアップ
                         layup = pdf[(pdf['項目']=='2P') & (pdf['詳細'].isin(['左レ', '右レ']))]
                         layup_i, layup_a = len(layup[layup['結果']=='成功']), len(layup)
                         
@@ -801,7 +805,7 @@ def draw_season_tab():
                     st.dataframe(ts_df.set_index('試合名'), use_container_width=True)
                     st.caption("💡 スワイプで横スクロール可能です。「G下(ｲﾝｻｲﾄﾞ)」は左下/中下/右下/中/中ミの合算、「ﾚｲｱｯﾌﾟ」は左レ/右レの合算確率です。")
             else:
-                st.warning(f"アップロードされたファイルに「{st.session_state.home_name}」のデータが見つかりません。")
+                st.warning(f"アップロードされたファイルに「{target_team}」のデータが見つかりません。上の入力欄の名前を確認してください。")
 
 # --- メイン画面描画 ---
 if st.session_state.read_only:
