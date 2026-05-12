@@ -11,12 +11,12 @@ import datetime
 import urllib.parse
 
 # ページ設定
-st.set_page_config(page_title="松浪ミニバス分析 V54.0", layout="centered")
+st.set_page_config(page_title="松浪ミニバス分析 V55.0", layout="centered")
 
 # ==========================================
 # ★ここに実際のアプリのURLを入力してください★
 # ==========================================
-APP_URL = "https://bsk-stats.streamlit.app/" 
+APP_URL = "https://your-app-url.streamlit.app" 
 
 
 # --- 0. CSS注入 ---
@@ -93,7 +93,6 @@ if 'room_key' not in st.session_state:
             del st.session_state['show_lock_warning']
             st.rerun()
     
-    # 未ログイン状態でもQRコードを表示
     st.divider()
     with st.expander("📱 このアプリをシェアする（QRコード）"):
         st.caption("以下のQRコードを読み取るか、URLをコピーしてLINE等で送ってください。")
@@ -276,7 +275,6 @@ with st.sidebar:
     st.button("⬅️ 退出する（使用者変更）", use_container_width=True, on_click=logout_room)
     st.divider()
     
-    # --- ★NEW：アプリのシェア機能★ ---
     with st.expander("📱 アプリを他の人に教える（シェア）"):
         st.caption("QRコードを読み取るか、URLをコピーしてLINE等で送ってください。")
         encoded_url = urllib.parse.quote(APP_URL)
@@ -296,7 +294,7 @@ with st.sidebar:
         st.text_input("🔵 自チーム名", key="home_name")
         st.text_input(f"🔵 新規選手を追加", placeholder="例: 13", key="new_h_input")
         st.button("＋追加＆出場", key="add_h", use_container_width=True, on_click=add_h_player)
-        with st.expander(f"👥 {st.session_state.home_name} 名簿を手学編集"): st.text_area("全背番号 (カンマ区切り)", key="r_str_h")
+        with st.expander(f"👥 {st.session_state.home_name} 名簿を手動編集"): st.text_area("全背番号 (カンマ区切り)", key="r_str_h")
         all_h = [x.strip() for x in st.session_state.r_str_h.split(",") if x.strip()]
         valid_act_h = [x for x in st.session_state.act_h if x in all_h]
         if st.session_state.act_h != valid_act_h: st.session_state.act_h = valid_act_h
@@ -361,7 +359,8 @@ def draw_action_menu():
             if c[1].button("3P", use_container_width=True, type="primary"): st.session_state.tmp['item']="3P"; st.session_state.mode="エリア＆結果選択"; safe_rerun()
             if c[2].button("FT", use_container_width=True): st.session_state.tmp['item']="FT"; st.session_state.mode="結果選択"; safe_rerun()
             
-            o = st.columns(3)
+            # ★大改修：ハッスルスタッツ（BLK, DEF）を4列で追加★
+            o = st.columns(4)
             with o[0]:
                 if st.button("OR", use_container_width=True): record("OR"); safe_rerun()
                 if st.button("DR", use_container_width=True): record("DR"); safe_rerun()
@@ -369,6 +368,9 @@ def draw_action_menu():
                 if st.button("AST", use_container_width=True): record("AST"); safe_rerun()
                 if st.button("STL", use_container_width=True): record("STL"); safe_rerun()
             with o[2]:
+                if st.button("BLK", use_container_width=True): record("BLK"); safe_rerun()
+                if st.button("DEF", use_container_width=True): record("DEF"); safe_rerun()
+            with o[3]:
                 if st.button("F", use_container_width=True): record("Foul"); safe_rerun()
                 
             st.write("▼ TurnOver")
@@ -487,7 +489,6 @@ def draw_stacked_chart(df, x_col, max_y):
         tooltip=[f"{x_col}:N", '結果:N', '回数:Q']
     )
     
-    # ★大改修(V53.0)：成功数/合計数（Make/Attempt）のテキストを作成★
     df_txt = df.copy()
     if '成功' not in df_txt.columns: df_txt['成功'] = 0
     if '失敗' not in df_txt.columns: df_txt['失敗'] = 0
@@ -583,10 +584,17 @@ def generate_coach_advice(df, home_name, away_name):
     h_reb, a_reb = h_or + h_dr, a_or + a_dr
     h_ast = len(h_df[h_df['項目'] == 'AST']); h_to = len(h_df[h_df['項目'] == 'TO'])
     h_pm = len(h_df[(h_df['項目'] == 'TO') & (h_df['詳細'] == 'PM')]); h_foul = len(h_df[h_df['項目'] == 'Foul'])
+    
+    # ★NEW：アドバイスにブロックとディフレクションを追加★
+    h_blk = len(h_df[h_df['項目'] == 'BLK'])
+    h_def = len(h_df[h_df['項目'] == 'DEF'])
 
     if h_3p_pct >= 0.33 and len(h_3p) >= 3: good.append(f"🎯 **外角のシュートタッチが良好！** (3P成功率: {h_3p_pct*100:.1f}%) この調子でスペーシングを広く保ちましょう。")
     if h_or > a_or and h_or >= 3: good.append(f"💪 **オフェンスリバウンドで圧倒！** ({h_or}本) 泥臭いプレイがセカンドチャンスを生んでいます。")
     if h_ast >= 5: good.append(f"🤝 **ボールがよく回っています！** ({h_ast}アシスト) 個人技に頼らない素晴らしいチームオフェンスです。")
+    if h_blk >= 3: good.append(f"🛡️ **リムプロテクトが機能しています！** ({h_blk}ブロック) インサイドの守備が引き締まっています。")
+    if h_def >= 5: good.append(f"🖐️ **ディフレクション（手を出す守備）が素晴らしい！** ({h_def}回) 球際への執念が相手の脅威になっています。")
+    
     if not good:
         if h_pts > a_pts: good.append("🔥 **リードを保っています！** 今のリズムを崩さず、ディフェンスから速攻を狙いましょう。")
         else: good.append("🛡️ **まずはディフェンスから！** 苦しい時間帯ですが、1回のストップから流れを引き寄せましょう。")
@@ -735,7 +743,7 @@ def draw_report_body():
     def get_stats_df(t_name, p_list_all):
         df = st.session_state.history[st.session_state.history['チーム'] == t_name]
         rows = []
-        tp, tm2i, tm2a, tm3i, tm3a, tfi, tfa, tor, tdr, tast, tstl, tf, ttv, tdd, tpm, ts24 = [0]*16
+        tp, tm2i, tm2a, tm3i, tm3a, tfi, tfa, tor, tdr, tast, tstl, tblk, tdef, tf, ttv, tdd, tpm, ts24 = [0]*18
         def fmt_stat(m, a): return f"{m}/{a}\n{(m/a*100):.0f}%" if a > 0 else "0/0\n0%"
         for p_num in p_list_all:
             pn = f"{p_num}番"; pdf = df[df['名前'] == pn]
@@ -744,21 +752,23 @@ def draw_report_body():
             fi, fa = len(pdf[(pdf['項目']=='FT') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='FT'])
             orb, drb = len(pdf[pdf['項目']=='OR']), len(pdf[pdf['項目']=='DR'])
             ast, stl, f = len(pdf[pdf['項目']=='AST']), len(pdf[pdf['項目']=='STL']), len(pdf[pdf['項目']=='Foul'])
+            blk = len(pdf[pdf['項目']=='BLK'])
+            deflection = len(pdf[pdf['項目']=='DEF'])
             to = pdf[pdf['項目']=='TO']; tv, dd, pm, s24 = len(to[to['詳細']=='TV']), len(to[to['詳細']=='DD']), len(to[to['詳細']=='PM']), len(to[to['詳細']=='24S'])
             p = pdf['点数'].sum()
-            tp+=p; tm2i+=m2i; tm2a+=m2a; tm3i+=m3i; tm3a+=m3a; tfi+=fi; tfa+=fa; tor+=orb; tdr+=drb; tast+=ast; tstl+=stl; tf+=f; ttv+=tv; tdd+=dd; tpm+=pm; ts24+=s24
+            tp+=p; tm2i+=m2i; tm2a+=m2a; tm3i+=m3i; tm3a+=m3a; tfi+=fi; tfa+=fa; tor+=orb; tdr+=drb; tast+=ast; tstl+=stl; tblk+=blk; tdef+=deflection; tf+=f; ttv+=tv; tdd+=dd; tpm+=pm; ts24+=s24
             
             pm_val = calculate_pm(p_num, t_name, st.session_state.history)
             
             rows.append({'#': p_num, 'Pts': p, '+/-': f"{pm_val:+}", 'FG\n(M/A)': fmt_stat(m2i+m3i, m2a+m3a), '3P\n(M/A)': fmt_stat(m3i, m3a), 'FT\n(M/A)': fmt_stat(fi, fa), 
-                         'REB\n(D/O)': f"{drb+orb}\n({drb}/{orb})", 'As': ast, 'St': stl, 'F': f, 'TO\n(T/D/P/2)': f"{tv+dd+pm+s24}\n({tv}/{dd}/{pm}/{s24})", 'Team': t_name})
+                         'REB\n(D/O)': f"{drb+orb}\n({drb}/{orb})", 'As': ast, 'St': stl, 'Blk': blk, 'Def': deflection, 'F': f, 'TO\n(T/D/P/2)': f"{tv+dd+pm+s24}\n({tv}/{dd}/{pm}/{s24})", 'Team': t_name})
         
         team_pts = st.session_state.history[st.session_state.history['チーム'] == t_name]['点数'].sum()
         opp_pts = st.session_state.history[st.session_state.history['チーム'] != t_name]['点数'].sum()
         total_pm = team_pts - opp_pts
         
         rows.append({'#': 'Total', 'Pts': tp, '+/-': f"{total_pm:+}", 'FG\n(M/A)': fmt_stat(tm2i+tm3i, tm2a+tm3a), '3P\n(M/A)': fmt_stat(tm3i, tm3a), 'FT\n(M/A)': fmt_stat(tfi, tfa), 
-                     'REB\n(D/O)': f"{tdr+tor}\n({tdr}/{tor})", 'As': tast, 'St': tstl, 'F': tf, 'TO\n(T/D/P/2)': f"{ttv+tdd+tpm+ts24}\n({ttv}/{tdd}/{tpm}/{ts24})", 'Team': t_name})
+                     'REB\n(D/O)': f"{tdr+tor}\n({tdr}/{tor})", 'As': tast, 'St': tstl, 'Blk': tblk, 'Def': tdef, 'F': tf, 'TO\n(T/D/P/2)': f"{ttv+tdd+tpm+ts24}\n({ttv}/{tdd}/{tpm}/{ts24})", 'Team': t_name})
         return pd.DataFrame(rows)
     
     h_df = get_stats_df(st.session_state.home_name, all_h); a_df = get_stats_df(st.session_state.away_name, all_a)
@@ -843,7 +853,7 @@ def draw_season_tab():
                 st.markdown(f"##### 🏆 シーズン戦績: **{wins}勝 {losses}敗 {draws}分**")
                 
                 rows = []
-                tp, tm2i, tm2a, tm3i, tm3a, tfi, tfa, tor, tdr, tast, tstl, tf, tto = 0,0,0,0,0,0,0,0,0,0,0,0,0
+                tp, tm2i, tm2a, tm3i, tm3a, tfi, tfa, tor, tdr, tast, tstl, tblk, tdef, tf, tto = 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
                 def fmt_stat(m, a): return f"{m}/{a}\n{(m/a*100):.0f}%" if a > 0 else "0/0\n0%"
                 
                 for p_num in s_players:
@@ -855,16 +865,18 @@ def draw_season_tab():
                     fi, fa = len(pdf[(pdf['項目']=='FT') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='FT'])
                     orb, drb = len(pdf[pdf['項目']=='OR']), len(pdf[pdf['項目']=='DR'])
                     ast, stl, f, to = len(pdf[pdf['項目']=='AST']), len(pdf[pdf['項目']=='STL']), len(pdf[pdf['項目']=='Foul']), len(pdf[pdf['項目']=='TO'])
+                    blk = len(pdf[pdf['項目']=='BLK'])
+                    deflection = len(pdf[pdf['項目']=='DEF'])
                     pts = pdf['点数'].sum()
                     
-                    tp+=pts; tm2i+=m2i; tm2a+=m2a; tm3i+=m3i; tm3a+=m3a; tfi+=fi; tfa+=fa; tor+=orb; tdr+=drb; tast+=ast; tstl+=stl; tf+=f; tto+=to
+                    tp+=pts; tm2i+=m2i; tm2a+=m2a; tm3i+=m3i; tm3a+=m3a; tfi+=fi; tfa+=fa; tor+=orb; tdr+=drb; tast+=ast; tstl+=stl; tblk+=blk; tdef+=deflection; tf+=f; tto+=to
                     
                     pm_val = calculate_pm(p_num, target_team, season_df)
                     
                     rows.append({
                         '#': p_num, '試合': games, 'Pts': pts, 'AVG': f"{(pts/games):.1f}" if games > 0 else "0.0", '+/-': f"{pm_val:+}",
                         'FG(M/A)': fmt_stat(m2i+m3i, m2a+m3a), '3P(M/A)': fmt_stat(m3i, m3a), 'FT(M/A)': fmt_stat(fi, fa),
-                        'REB(D/O)': f"{drb+orb}\n({drb}/{orb})", 'As': ast, 'St': stl, 'F': f, 'TO': to
+                        'REB(D/O)': f"{drb+orb}\n({drb}/{orb})", 'As': ast, 'St': stl, 'Blk': blk, 'Def': deflection, 'F': f, 'TO': to
                     })
                 
                 total_games = h_season_df['Match_ID'].nunique()
@@ -873,7 +885,7 @@ def draw_season_tab():
                 rows.append({
                     '#': 'Total', '試合': total_games, 'Pts': tp, 'AVG': f"{(tp/total_games):.1f}" if total_games > 0 else "0.0", '+/-': f"{total_pm:+}",
                     'FG(M/A)': fmt_stat(tm2i+tm3i, tm2a+tm3a), '3P(M/A)': fmt_stat(tm3i, tm3a), 'FT(M/A)': fmt_stat(tfi, tfa),
-                    'REB(D/O)': f"{tdr+tor}\n({tdr}/{tor})", 'As': tast, 'St': tstl, 'F': tf, 'TO': tto
+                    'REB(D/O)': f"{tdr+tor}\n({tdr}/{tor})", 'As': tast, 'St': tstl, 'Blk': tblk, 'Def': tdef, 'F': tf, 'TO': tto
                 })
                 season_stats_df = pd.DataFrame(rows)
                 st.dataframe(season_stats_df.set_index('#'), use_container_width=True)
@@ -908,6 +920,8 @@ def draw_season_tab():
                     fi, fa = len(pdf[(pdf['項目']=='FT') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='FT'])
                     orb, drb = len(pdf[pdf['項目']=='OR']), len(pdf[pdf['項目']=='DR'])
                     ast, stl, f = len(pdf[pdf['項目']=='AST']), len(pdf[pdf['項目']=='STL']), len(pdf[pdf['項目']=='Foul'])
+                    blk = len(pdf[pdf['項目']=='BLK'])
+                    deflection = len(pdf[pdf['項目']=='DEF'])
                     pts = pdf['点数'].sum()
                     
                     to = pdf[pdf['項目']=='TO']
@@ -928,7 +942,7 @@ def draw_season_tab():
                         'スコア': match_info[match_id]['スコア'],
                         'Pts': pts, '+/-': pm_match,
                         'FG': fmt_stat_inline(m2i+m3i, m2a+m3a), '3P': fmt_stat_inline(m3i, m3a), 'FT': fmt_stat_inline(fi, fa),
-                        'OR': orb, 'DR': drb, 'As': ast, 'St': stl, 'F': f,
+                        'OR': orb, 'DR': drb, 'As': ast, 'St': stl, 'Blk': blk, 'Def': deflection, 'F': f,
                         'TV': tv, 'DD': dd, 'PM(ﾊﾟｽﾐｽ)': pm, '24S': s24,
                         'G下(ｲﾝｻｲﾄﾞ)': fmt_stat_inline(in_paint_i, in_paint_a),
                         'ﾚｲｱｯﾌﾟ': fmt_stat_inline(layup_i, layup_a),
@@ -969,7 +983,7 @@ def draw_season_tab():
                     else: st.caption("データなし")
 
                 st.markdown(f"##### 📉 時系列 折れ線グラフ ({target_scope})")
-                numeric_cols = ['Pts', '+/-', 'OR', 'DR', 'As', 'St', 'F', 'PM(ﾊﾟｽﾐｽ)', 'TV', 'DD', '24S']
+                numeric_cols = ['Pts', '+/-', 'OR', 'DR', 'As', 'St', 'Blk', 'Def', 'F', 'PM(ﾊﾟｽﾐｽ)', 'TV', 'DD', '24S']
                 selected_stat = st.selectbox("グラフ化する項目を選択してください", numeric_cols, index=0)
                 
                 line_chart = alt.Chart(ts_df).mark_line(point=True, color='#e74c3c', strokeWidth=3).encode(
