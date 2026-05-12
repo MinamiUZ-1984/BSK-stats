@@ -10,7 +10,7 @@ import streamlit.components.v1 as components
 import datetime
 
 # ページ設定
-st.set_page_config(page_title="松浪ミニバス分析 V51.0", layout="centered")
+st.set_page_config(page_title="松浪ミニバス分析 V53.0", layout="centered")
 
 # --- 0. CSS注入 ---
 st.markdown("""
@@ -451,6 +451,8 @@ def draw_action_menu():
 # --- 📊 共通グラフ ＆ 計算関数群 ---
 def draw_stacked_chart(df, x_col, max_y):
     if df.empty: return
+    
+    # 棒グラフの描画
     df_m = df.reset_index().melt(id_vars=x_col, var_name='結果', value_name='回数')
     bars = alt.Chart(df_m).mark_bar().encode(
         x=alt.X(f"{x_col}:N", sort=None, title='', axis=alt.Axis(labelAngle=-45, labelOverlap=False)),
@@ -459,16 +461,25 @@ def draw_stacked_chart(df, x_col, max_y):
         order=alt.Order('結果:N', sort='ascending'),
         tooltip=[f"{x_col}:N", '結果:N', '回数:Q']
     )
-    df_text = df_m[df_m['回数'] > 0].copy()
-    text = alt.Chart(df_text).mark_text(dx=0, dy=12, color='white', baseline='top', fontWeight='bold', fontSize=11).encode(
-        x=alt.X(f"{x_col}:N", sort=None), y=alt.Y('回数:Q', stack='zero'), detail='結果:N', order=alt.Order('結果:N', sort='ascending'), text='回数:Q'
+    
+    # ★大改修：成功数/合計数（Make/Attempt）のテキストを作成★
+    df_txt = df.copy()
+    if '成功' not in df_txt.columns: df_txt['成功'] = 0
+    if '失敗' not in df_txt.columns: df_txt['失敗'] = 0
+    df_txt['Total'] = df_txt['成功'] + df_txt['失敗']
+    # 「成功/トータル」の文字列を作成（例: 3/5）
+    df_txt['Label'] = df_txt['成功'].astype(int).astype(str) + "/" + df_txt['Total'].astype(int).astype(str)
+    # トータルが0以上のものだけ残す
+    df_txt = df_txt[df_txt['Total'] > 0].reset_index()
+
+    # 棒グラフの上に「Make/Total」を表示
+    total_text = alt.Chart(df_txt).mark_text(dy=-10, color='black', fontWeight='bold', fontSize=12).encode(
+        x=alt.X(f"{x_col}:N", sort=None), 
+        y=alt.Y('Total:Q'), 
+        text='Label:N'
     )
-    df_total = df_m.groupby(x_col, as_index=False)['回数'].sum()
-    df_total_text = df_total[df_total['回数'] > 0].copy()
-    total_text = alt.Chart(df_total_text).mark_text(dy=-8, color='black', fontWeight='bold', fontSize=12).encode(
-        x=alt.X(f"{x_col}:N", sort=None), y=alt.Y('回数:Q'), text='回数:Q'
-    )
-    chart = alt.layer(bars, text, total_text).properties(height=250)
+    
+    chart = alt.layer(bars, total_text).properties(height=250)
     st.altair_chart(chart, use_container_width=True)
 
 def draw_simple_bar_chart(s, x_name, max_y, sort_order, color_range=None):
@@ -581,7 +592,6 @@ def draw_report_body():
         rep_qs['Total'] = rep_qs.sum(axis=1); st.table(rep_qs.astype(int))
     except: pass
     
-    # --- ★NEW & IMPROVED：ゲームフロー（点差推移）グラフ★ ---
     st.subheader("📊 ゲームフロー（点差推移）")
     flow_df = st.session_state.history[st.session_state.history['点数'] > 0].copy()
     if not flow_df.empty:
@@ -591,7 +601,6 @@ def draw_report_body():
         flow_df['点差'] = h_pts_cumsum - a_pts_cumsum
         flow_df['Play'] = flow_df['Q'] + " " + flow_df['チーム'] + " " + flow_df['点数'].astype(str) + "点"
         
-        # X軸を等間隔にするための連番
         flow_df['seq'] = range(1, len(flow_df) + 1)
         
         start_row = pd.DataFrame([{'seq': 0, '点差': 0, 'Play': 'Start', 'チーム': '-', 'Q': '1Q'}])
@@ -605,7 +614,6 @@ def draw_report_body():
             tooltip=['Play', '点差']
         )
         
-        # ★各Qの最初の得点プレイを取得して区切り線とラベルを描画★
         boundaries = plot_df.drop_duplicates(subset=['Q'], keep='first')
         
         rules = alt.Chart(boundaries).mark_rule(color='gray', strokeDash=[4, 4]).encode(
@@ -616,7 +624,7 @@ def draw_report_body():
             align='left', baseline='bottom', dx=3, dy=-5, color='gray', fontSize=12, fontWeight='bold'
         ).encode(
             x=alt.X('seq:O'),
-            y=alt.value(0), # チャートの最上部に固定
+            y=alt.value(0),
             text='Q:N'
         )
         
