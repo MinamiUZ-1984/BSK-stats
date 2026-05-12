@@ -10,7 +10,7 @@ import streamlit.components.v1 as components
 import datetime
 
 # ページ設定
-st.set_page_config(page_title="松浪ミニバス分析 V49.0", layout="centered")
+st.set_page_config(page_title="松浪ミニバス分析 V50.0", layout="centered")
 
 # --- 0. CSS注入 ---
 st.markdown("""
@@ -185,7 +185,10 @@ if 'app_init' not in st.session_state:
             for k, v in s.items(): st.session_state[k] = v
         except: pass
 
-if 'history' not in st.session_state: st.session_state.history = pd.DataFrame(columns=['id', 'Q', 'チーム', '名前', '項目', '詳細', '結果', '点数'])
+# ★大改修：オンコート選手を記憶するカラムを追加★
+if 'history' not in st.session_state: 
+    st.session_state.history = pd.DataFrame(columns=['id', 'Q', 'チーム', '名前', '項目', '詳細', '結果', '点数', 'オンコートH', 'オンコートA'])
+
 if 'match_date' not in st.session_state: st.session_state.match_date = datetime.date.today().strftime("%Y%m%d")
 if 'match_number' not in st.session_state: st.session_state.match_number = "01"
 if 'tournament_name' not in st.session_state: st.session_state.tournament_name = "練習試合"
@@ -200,7 +203,6 @@ if 'mode' not in st.session_state: st.session_state.mode = "選手選択"
 if 'tmp' not in st.session_state: st.session_state.tmp = {}
 if 'report_trigger' not in st.session_state: st.session_state.report_trigger = False
 
-# --- エクセル保存・文字コード対策の読み込み機能 ---
 def load_csv_data():
     if st.session_state.uploaded_file is not None:
         try:
@@ -211,6 +213,10 @@ def load_csv_data():
                 df = pd.read_csv(io.BytesIO(file_bytes), encoding='cp932')
                 
             df.columns = [str(c).replace('\ufeff', '').strip() for c in df.columns]
+            
+            # ★旧データの救済（オンコート列がない場合は空で追加）★
+            if 'オンコートH' not in df.columns: df['オンコートH'] = ""
+            if 'オンコートA' not in df.columns: df['オンコートA'] = ""
 
             if set(['id', 'Q', 'チーム', '名前', '項目', '詳細', '結果', '点数']).issubset(df.columns):
                 df['チーム'] = df['チーム'].astype(str).str.strip()
@@ -290,12 +296,17 @@ with st.sidebar:
     else:
         st.info("※見るだけモードのため、選手追加やデータリセット等の設定は行えません。")
 
-# --- 共通記録関数 ---
+# --- 共通記録関数（オンコート自動保存対応） ---
 def record(item, detail="-", res="成功", pts=0, team=None, name=None):
     t_name = team if team else st.session_state.tmp.get('team', 'UNKNOWN')
     p_name = name if name else (f"{st.session_state.tmp['player']}番" if 'player' in st.session_state.tmp else "TEAM")
     new_id = st.session_state.history['id'].max() + 1 if not st.session_state.history.empty else 1
-    new_row = pd.DataFrame([{'id': new_id, 'Q': st.session_state.current_q, 'チーム': t_name, '名前': p_name, '項目': item, '詳細': detail, '結果': res, '点数': pts}])
+    
+    # ★NEW：その瞬間のコート上の選手を文字として記憶★
+    onc_h = ",".join(st.session_state.act_h)
+    onc_a = ",".join(st.session_state.act_a)
+    
+    new_row = pd.DataFrame([{'id': new_id, 'Q': st.session_state.current_q, 'チーム': t_name, '名前': p_name, '項目': item, '詳細': detail, '結果': res, '点数': pts, 'オンコートH': onc_h, 'オンコートA': onc_a}])
     st.session_state.history = pd.concat([st.session_state.history, new_row], ignore_index=True)
     st.session_state.mode = "選手選択"; st.toast(f"記録完了")
 
@@ -440,7 +451,7 @@ def draw_action_menu():
             st.divider()
             if st.button("⏩ リバウンド記録なし（スキップ）", use_container_width=True): st.session_state.mode = "選手選択"; safe_rerun()
 
-# --- 📊 共通グラフ描画関数群 ---
+# --- 📊 共通グラフ ＆ 計算関数群 ---
 def draw_stacked_chart(df, x_col, max_y):
     if df.empty: return
     df_m = df.reset_index().melt(id_vars=x_col, var_name='結果', value_name='回数')
@@ -479,6 +490,18 @@ def draw_simple_bar_chart(s, x_name, max_y, sort_order, color_range=None):
     )
     chart = alt.layer(bars, text).properties(height=200)
     st.altair_chart(chart, use_container_width=True)
+
+# ★NEW：プラスマイナス(+/-)計算ヘルパー★
+def calculate_pm(p_num_str, target_team, df_events):
+    if 'オンコートH' not in df_events.columns or 'オンコートA' not in df_events.columns: return 0
+    pm = 0
+    score_events = df_events[df_events['点数'] > 0]
+    for _, row in score_events.iterrows():
+        in_h = str(p_num_str) in str(row['オンコートH']).split(',')
+        in_a = str(p_num_str) in str(row['オンコートA']).split(',')
+        if in_h or in_a:
+            pm += row['点数'] if row['チーム'] == target_team else -row['点数']
+    return pm
 
 def get_shot_stats(df):
     sh = df[df['項目'].isin(['2P', '3P', 'FT'])]
@@ -561,6 +584,32 @@ def draw_report_body():
         rep_qs = st.session_state.history.groupby(['チーム', 'Q'])['点数'].sum().unstack(fill_value=0).reindex(index=[st.session_state.home_name, st.session_state.away_name], columns=["1Q", "2Q", "3Q", "4Q", "OT"], fill_value=0)
         rep_qs['Total'] = rep_qs.sum(axis=1); st.table(rep_qs.astype(int))
     except: pass
+    
+    # --- ★NEW：ゲームフロー（点差推移）グラフ★ ---
+    st.subheader("📊 ゲームフロー（点差推移）")
+    flow_df = st.session_state.history[st.session_state.history['点数'] > 0].copy()
+    if not flow_df.empty:
+        flow_df = flow_df.sort_values('id').reset_index(drop=True)
+        h_pts_cumsum = (flow_df['点数'] * (flow_df['チーム'] == st.session_state.home_name)).cumsum()
+        a_pts_cumsum = (flow_df['点数'] * (flow_df['チーム'] == st.session_state.away_name)).cumsum()
+        flow_df['点差'] = h_pts_cumsum - a_pts_cumsum
+        flow_df['Play'] = flow_df['Q'] + " " + flow_df['チーム'] + " " + flow_df['点数'].astype(str) + "点"
+        
+        start_row = pd.DataFrame([{'id': 0, '点差': 0, 'Play': 'Start', 'チーム': '-'}])
+        plot_df = pd.concat([start_row, flow_df], ignore_index=True)
+        plot_df['リード'] = plot_df['点差'].apply(lambda x: st.session_state.home_name if x > 0 else (st.session_state.away_name if x < 0 else '同点'))
+        
+        bar_chart = alt.Chart(plot_df).mark_bar(size=10).encode(
+            x=alt.X('id:O', title='得点プレイ順', axis=alt.Axis(labels=False, ticks=False)),
+            y=alt.Y('点差:Q', title=f'← {st.session_state.away_name} リード ｜ {st.session_state.home_name} リード →'),
+            color=alt.Color('リード:N', scale=alt.Scale(domain=[st.session_state.home_name, '同点', st.session_state.away_name], range=['#3498db', '#bdc3c7', '#e74c3c']), legend=None),
+            tooltip=['Play', '点差']
+        ).properties(height=250)
+        st.altair_chart(bar_chart, use_container_width=True)
+        st.caption("※ 上に伸びると松浪リード、下に伸びると相手リードです。試合の流れ（波）がわかります。")
+    else:
+        st.caption("得点データがありません")
+
     st.header("2. 分析グラフ")
     selected_q_graph = st.radio("グラフ対象期間", ["Total", "1Q", "2Q", "3Q", "4Q", "OT"], horizontal=True, label_visibility="collapsed")
     if selected_q_graph == "Total": filtered_history = st.session_state.history
@@ -652,9 +701,19 @@ def draw_report_body():
             to = pdf[pdf['項目']=='TO']; tv, dd, pm, s24 = len(to[to['詳細']=='TV']), len(to[to['詳細']=='DD']), len(to[to['詳細']=='PM']), len(to[to['詳細']=='24S'])
             p = pdf['点数'].sum()
             tp+=p; tm2i+=m2i; tm2a+=m2a; tm3i+=m3i; tm3a+=m3a; tfi+=fi; tfa+=fa; tor+=orb; tdr+=drb; tast+=ast; tstl+=stl; tf+=f; ttv+=tv; tdd+=dd; tpm+=pm; ts24+=s24
-            rows.append({'#': p_num, 'Pts': p, 'FG\n(M/A)': fmt_stat(m2i+m3i, m2a+m3a), '3P\n(M/A)': fmt_stat(m3i, m3a), 'FT\n(M/A)': fmt_stat(fi, fa), 
+            
+            # ★NEW：+/- (プラスマイナス) の計算★
+            pm_val = calculate_pm(p_num, t_name, st.session_state.history)
+            
+            rows.append({'#': p_num, 'Pts': p, '+/-': f"{pm_val:+}", 'FG\n(M/A)': fmt_stat(m2i+m3i, m2a+m3a), '3P\n(M/A)': fmt_stat(m3i, m3a), 'FT\n(M/A)': fmt_stat(fi, fa), 
                          'REB\n(D/O)': f"{drb+orb}\n({drb}/{orb})", 'As': ast, 'St': stl, 'F': f, 'TO\n(T/D/P/2)': f"{tv+dd+pm+s24}\n({tv}/{dd}/{pm}/{s24})", 'Team': t_name})
-        rows.append({'#': 'Total', 'Pts': tp, 'FG\n(M/A)': fmt_stat(tm2i+tm3i, tm2a+tm3a), '3P\n(M/A)': fmt_stat(tm3i, tm3a), 'FT\n(M/A)': fmt_stat(tfi, tfa), 
+        
+        # チーム全体の点差を計算して Total の +/- に表示
+        team_pts = st.session_state.history[st.session_state.history['チーム'] == t_name]['点数'].sum()
+        opp_pts = st.session_state.history[st.session_state.history['チーム'] != t_name]['点数'].sum()
+        total_pm = team_pts - opp_pts
+        
+        rows.append({'#': 'Total', 'Pts': tp, '+/-': f"{total_pm:+}", 'FG\n(M/A)': fmt_stat(tm2i+tm3i, tm2a+tm3a), '3P\n(M/A)': fmt_stat(tm3i, tm3a), 'FT\n(M/A)': fmt_stat(tfi, tfa), 
                      'REB\n(D/O)': f"{tdr+tor}\n({tdr}/{tor})", 'As': tast, 'St': tstl, 'F': tf, 'TO\n(T/D/P/2)': f"{ttv+tdd+tpm+ts24}\n({ttv}/{tdd}/{tpm}/{ts24})", 'Team': t_name})
         return pd.DataFrame(rows)
     
@@ -675,10 +734,10 @@ def draw_report_body():
     csv_log = st.session_state.history.to_csv(index=False).encode('utf_8_sig')
     st.download_button("📜 ログCSV保存", csv_log, f"{prefix}_log.csv", "text/csv")
 
-# --- ★大改修：シーズン成績タブ (勝敗・スコア自動計算追加)★ ---
+# --- シーズン成績タブ ---
 def draw_season_tab():
     st.header("📈 シーズン成績 ＆ 時系列推移")
-    st.write(f"過去の試合ログ(CSV)を複数読み込んで、**{st.session_state.home_name}** の累計スタッツや成長を分析します。")
+    st.write("過去の試合ログ(CSV)を複数読み込んで、チームの累計スタッツや選手の成長を分析できます。")
     
     target_team = st.text_input("🔍 分析対象チーム名（HOME）を入力", value=st.session_state.home_name, key="season_target_team")
     
@@ -738,7 +797,6 @@ def draw_season_tab():
                 
                 s_players = sorted([p.replace('番','') for p in h_season_df['名前'].unique() if p != 'TEAM'], key=safe_sort_key)
                 
-                # --- ① チーム全体スタッツ ---
                 st.subheader(f"① {target_team} チーム全体スタッツ")
                 # ★NEW：チームのシーズン戦績表示★
                 st.markdown(f"##### 🏆 シーズン戦績: **{wins}勝 {losses}敗 {draws}分**")
@@ -760,15 +818,20 @@ def draw_season_tab():
                     
                     tp+=pts; tm2i+=m2i; tm2a+=m2a; tm3i+=m3i; tm3a+=m3a; tfi+=fi; tfa+=fa; tor+=orb; tdr+=drb; tast+=ast; tstl+=stl; tf+=f; tto+=to
                     
+                    # ★NEW：シーズン通算の +/- 計算★
+                    pm_val = calculate_pm(p_num, target_team, season_df)
+                    
                     rows.append({
-                        '#': p_num, '試合': games, 'Pts': pts, 'AVG': f"{(pts/games):.1f}" if games > 0 else "0.0",
+                        '#': p_num, '試合': games, 'Pts': pts, 'AVG': f"{(pts/games):.1f}" if games > 0 else "0.0", '+/-': f"{pm_val:+}",
                         'FG(M/A)': fmt_stat(m2i+m3i, m2a+m3a), '3P(M/A)': fmt_stat(m3i, m3a), 'FT(M/A)': fmt_stat(fi, fa),
                         'REB(D/O)': f"{drb+orb}\n({drb}/{orb})", 'As': ast, 'St': stl, 'F': f, 'TO': to
                     })
                 
                 total_games = h_season_df['Match_ID'].nunique()
+                total_pm = season_df[season_df['チーム'] == target_team]['点数'].sum() - season_df[season_df['チーム'] != target_team]['点数'].sum()
+                
                 rows.append({
-                    '#': 'Total', '試合': total_games, 'Pts': tp, 'AVG': f"{(tp/total_games):.1f}" if total_games > 0 else "0.0",
+                    '#': 'Total', '試合': total_games, 'Pts': tp, 'AVG': f"{(tp/total_games):.1f}" if total_games > 0 else "0.0", '+/-': f"{total_pm:+}",
                     'FG(M/A)': fmt_stat(tm2i+tm3i, tm2a+tm3a), '3P(M/A)': fmt_stat(tm3i, tm3a), 'FT(M/A)': fmt_stat(tfi, tfa),
                     'REB(D/O)': f"{tdr+tor}\n({tdr}/{tor})", 'As': tast, 'St': tstl, 'F': tf, 'TO': tto
                 })
@@ -780,7 +843,6 @@ def draw_season_tab():
                 
                 st.divider()
                 
-                # --- ② 個人スタッツ ＆ 分析グラフ ---
                 st.subheader("② 個人スタッツ ＆ 分析グラフ")
                 target_scope = st.selectbox("分析対象（チーム全体・個人）を選択してください", ["チーム全体"] + s_players)
                 
@@ -789,7 +851,6 @@ def draw_season_tab():
                 else:
                     target_df = h_season_df[h_season_df['名前'] == f"{target_scope}番"]
                     
-                # 📅 時系列スタッツ表
                 st.markdown(f"##### 📅 時系列スタッツ表 ({target_scope})")
                 ts_rows = []
                 def fmt_stat_inline(m, a): return f"{m}/{a} ({(m/a*100):.0f}%)" if a > 0 else "-"
@@ -800,7 +861,6 @@ def draw_season_tab():
                 
                 for match_id in match_order:
                     pdf = target_df[target_df['Match_ID'] == match_id]
-                    # 個人を選択していて、その試合に出ていない場合はスキップ
                     if pdf.empty and target_scope != "チーム全体": continue
                     
                     m2i, m2a = len(pdf[(pdf['項目']=='2P') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='2P'])
@@ -819,12 +879,15 @@ def draw_season_tab():
                     layup = pdf[(pdf['項目']=='2P') & (pdf['詳細'].isin(['左レ', '右レ']))]
                     layup_i, layup_a = len(layup[layup['結果']=='成功']), len(layup)
                     
-                    # ★NEW：勝敗とスコアを追加して配列に格納！★
+                    # ★NEW：試合ごとの +/- 計算★
+                    match_full_df = season_df[season_df['Match_ID'] == match_id]
+                    pm_match = calculate_pm(target_scope, target_team, match_full_df) if target_scope != "チーム全体" else (match_full_df[match_full_df['チーム'] == target_team]['点数'].sum() - match_full_df[match_full_df['チーム'] != target_team]['点数'].sum())
+                    
                     ts_rows.append({
                         '試合名': match_id,
                         '勝敗': match_info[match_id]['勝敗'],
                         'スコア': match_info[match_id]['スコア'],
-                        'Pts': pts,
+                        'Pts': pts, '+/-': pm_match,
                         'FG': fmt_stat_inline(m2i+m3i, m2a+m3a), '3P': fmt_stat_inline(m3i, m3a), 'FT': fmt_stat_inline(fi, fa),
                         'OR': orb, 'DR': drb, 'As': ast, 'St': stl, 'F': f,
                         'TV': tv, 'DD': dd, 'PM(ﾊﾟｽﾐｽ)': pm, '24S': s24,
@@ -838,7 +901,6 @@ def draw_season_tab():
                 st.dataframe(ts_df.set_index('試合名'), use_container_width=True)
                 st.caption("💡 スワイプで横スクロール可能です。「スコア」は [自チーム - 相手チーム] の点数です。")
 
-                # 📊 累積スタッツ (棒グラフ)
                 st.markdown(f"##### 📊 累積スタッツ 棒グラフ ({target_scope})")
                 bc1, bc2 = st.columns(2)
                 with bc1:
@@ -867,9 +929,8 @@ def draw_season_tab():
                     if to_stats.sum() > 0: draw_simple_bar_chart(to_stats, '詳細', max_y_to, ['TV', 'DD', 'PM', '24S', 'Total'], ['#95a5a6', '#95a5a6', '#95a5a6', '#95a5a6', '#e74c3c'])
                     else: st.caption("データなし")
 
-                # 📉 時系列推移 (折れ線グラフ)
                 st.markdown(f"##### 📉 時系列 折れ線グラフ ({target_scope})")
-                numeric_cols = ['Pts', 'OR', 'DR', 'As', 'St', 'F', 'PM(ﾊﾟｽﾐｽ)', 'TV', 'DD', '24S']
+                numeric_cols = ['Pts', '+/-', 'OR', 'DR', 'As', 'St', 'F', 'PM(ﾊﾟｽﾐｽ)', 'TV', 'DD', '24S']
                 selected_stat = st.selectbox("グラフ化する項目を選択してください", numeric_cols, index=0)
                 
                 line_chart = alt.Chart(ts_df).mark_line(point=True, color='#e74c3c', strokeWidth=3).encode(
