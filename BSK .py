@@ -8,9 +8,16 @@ import altair as alt
 import uuid
 import streamlit.components.v1 as components
 import datetime
+import urllib.parse
 
 # ページ設定
-st.set_page_config(page_title="松浪ミニバス分析 V53.0", layout="centered")
+st.set_page_config(page_title="松浪ミニバス分析 V54.0", layout="centered")
+
+# ==========================================
+# ★ここに実際のアプリのURLを入力してください★
+# ==========================================
+APP_URL = "https://bsk-stats.streamlit.app/" 
+
 
 # --- 0. CSS注入 ---
 st.markdown("""
@@ -85,6 +92,16 @@ if 'room_key' not in st.session_state:
             st.session_state.read_only = False
             del st.session_state['show_lock_warning']
             st.rerun()
+    
+    # 未ログイン状態でもQRコードを表示
+    st.divider()
+    with st.expander("📱 このアプリをシェアする（QRコード）"):
+        st.caption("以下のQRコードを読み取るか、URLをコピーしてLINE等で送ってください。")
+        encoded_url = urllib.parse.quote(APP_URL)
+        st.image(f"https://api.qrserver.com/v1/create-qr-code/?size=150x150&data={encoded_url}")
+        st.code(APP_URL, language="text")
+        st.caption("↑ 右上のアイコンをタップでURLをコピーできます！")
+        
     st.stop() 
 
 # --- 設定・ログファイル名 ---
@@ -258,6 +275,15 @@ with st.sidebar:
     st.caption(f"現在の権限: {mode_str}")
     st.button("⬅️ 退出する（使用者変更）", use_container_width=True, on_click=logout_room)
     st.divider()
+    
+    # --- ★NEW：アプリのシェア機能★ ---
+    with st.expander("📱 アプリを他の人に教える（シェア）"):
+        st.caption("QRコードを読み取るか、URLをコピーしてLINE等で送ってください。")
+        encoded_url = urllib.parse.quote(APP_URL)
+        st.image(f"https://api.qrserver.com/v1/create-qr-code/?size=150x150&data={encoded_url}", use_container_width=True)
+        st.code(APP_URL, language="text")
+        st.caption("↑ 右上のアイコンをタップでURLをコピーできます！")
+    st.divider()
 
     if not st.session_state.read_only:
         st.header("🏆 試合設定")
@@ -270,7 +296,7 @@ with st.sidebar:
         st.text_input("🔵 自チーム名", key="home_name")
         st.text_input(f"🔵 新規選手を追加", placeholder="例: 13", key="new_h_input")
         st.button("＋追加＆出場", key="add_h", use_container_width=True, on_click=add_h_player)
-        with st.expander(f"👥 {st.session_state.home_name} 名簿を手動編集"): st.text_area("全背番号 (カンマ区切り)", key="r_str_h")
+        with st.expander(f"👥 {st.session_state.home_name} 名簿を手学編集"): st.text_area("全背番号 (カンマ区切り)", key="r_str_h")
         all_h = [x.strip() for x in st.session_state.r_str_h.split(",") if x.strip()]
         valid_act_h = [x for x in st.session_state.act_h if x in all_h]
         if st.session_state.act_h != valid_act_h: st.session_state.act_h = valid_act_h
@@ -452,7 +478,6 @@ def draw_action_menu():
 def draw_stacked_chart(df, x_col, max_y):
     if df.empty: return
     
-    # 棒グラフの描画
     df_m = df.reset_index().melt(id_vars=x_col, var_name='結果', value_name='回数')
     bars = alt.Chart(df_m).mark_bar().encode(
         x=alt.X(f"{x_col}:N", sort=None, title='', axis=alt.Axis(labelAngle=-45, labelOverlap=False)),
@@ -462,17 +487,14 @@ def draw_stacked_chart(df, x_col, max_y):
         tooltip=[f"{x_col}:N", '結果:N', '回数:Q']
     )
     
-    # ★大改修：成功数/合計数（Make/Attempt）のテキストを作成★
+    # ★大改修(V53.0)：成功数/合計数（Make/Attempt）のテキストを作成★
     df_txt = df.copy()
     if '成功' not in df_txt.columns: df_txt['成功'] = 0
     if '失敗' not in df_txt.columns: df_txt['失敗'] = 0
     df_txt['Total'] = df_txt['成功'] + df_txt['失敗']
-    # 「成功/トータル」の文字列を作成（例: 3/5）
     df_txt['Label'] = df_txt['成功'].astype(int).astype(str) + "/" + df_txt['Total'].astype(int).astype(str)
-    # トータルが0以上のものだけ残す
     df_txt = df_txt[df_txt['Total'] > 0].reset_index()
 
-    # 棒グラフの上に「Make/Total」を表示
     total_text = alt.Chart(df_txt).mark_text(dy=-10, color='black', fontWeight='bold', fontSize=12).encode(
         x=alt.X(f"{x_col}:N", sort=None), 
         y=alt.Y('Total:Q'), 
