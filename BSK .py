@@ -10,7 +10,7 @@ import streamlit.components.v1 as components
 import datetime
 
 # ページ設定
-st.set_page_config(page_title="松浪ミニバス分析 V48.0", layout="centered")
+st.set_page_config(page_title="松浪ミニバス分析 V49.0", layout="centered")
 
 # --- 0. CSS注入 ---
 st.markdown("""
@@ -200,15 +200,13 @@ if 'mode' not in st.session_state: st.session_state.mode = "選手選択"
 if 'tmp' not in st.session_state: st.session_state.tmp = {}
 if 'report_trigger' not in st.session_state: st.session_state.report_trigger = False
 
-# ★大改修：Excel編集による文字コード問題（Shift-JIS）に完全対応！★
+# --- エクセル保存・文字コード対策の読み込み機能 ---
 def load_csv_data():
     if st.session_state.uploaded_file is not None:
         try:
             file_bytes = st.session_state.uploaded_file.getvalue()
-            # 1. まず標準の utf_8_sig で読み込みを試みる
             try: 
                 df = pd.read_csv(io.BytesIO(file_bytes), encoding='utf_8_sig')
-            # 2. エラー（Excel編集済み）なら自動的に Shift-JIS(cp932) で読み込む
             except UnicodeDecodeError: 
                 df = pd.read_csv(io.BytesIO(file_bytes), encoding='cp932')
                 
@@ -677,7 +675,7 @@ def draw_report_body():
     csv_log = st.session_state.history.to_csv(index=False).encode('utf_8_sig')
     st.download_button("📜 ログCSV保存", csv_log, f"{prefix}_log.csv", "text/csv")
 
-# --- ★大改修：シーズン成績タブ (Excelエラー完全対応版)★ ---
+# --- ★大改修：シーズン成績タブ (勝敗・スコア自動計算追加)★ ---
 def draw_season_tab():
     st.header("📈 シーズン成績 ＆ 時系列推移")
     st.write(f"過去の試合ログ(CSV)を複数読み込んで、**{st.session_state.home_name}** の累計スタッツや成長を分析します。")
@@ -692,10 +690,8 @@ def draw_season_tab():
         match_order = []
         for idx, file in enumerate(sorted(season_files, key=lambda x: x.name)):
             try:
-                # 1. UTF-8で読み込み
                 try: 
                     df = pd.read_csv(file, encoding='utf_8_sig')
-                # 2. エラーならShift-JISで読み込み
                 except UnicodeDecodeError: 
                     file.seek(0)
                     df = pd.read_csv(file, encoding='cp932')
@@ -721,10 +717,32 @@ def draw_season_tab():
             
             if not h_season_df.empty:
                 st.success(f"✅ {len(dfs)}試合分のデータを読み込みました！ (対象: **{target_team}**)")
+                
+                # --- ★NEW：勝敗とスコアの事前計算★ ---
+                match_info = {}
+                wins, losses, draws = 0, 0, 0
+                for m_id in match_order:
+                    m_df = season_df[season_df['Match_ID'] == m_id]
+                    h_pts = m_df[m_df['チーム'] == target_team]['点数'].sum()
+                    a_pts = m_df[m_df['チーム'] != target_team]['点数'].sum()
+                    if h_pts > a_pts: 
+                        wl = '勝'
+                        wins += 1
+                    elif h_pts < a_pts: 
+                        wl = '負'
+                        losses += 1
+                    else: 
+                        wl = '分'
+                        draws += 1
+                    match_info[m_id] = {'勝敗': wl, 'スコア': f"{h_pts} - {a_pts}"}
+                
                 s_players = sorted([p.replace('番','') for p in h_season_df['名前'].unique() if p != 'TEAM'], key=safe_sort_key)
                 
                 # --- ① チーム全体スタッツ ---
                 st.subheader(f"① {target_team} チーム全体スタッツ")
+                # ★NEW：チームのシーズン戦績表示★
+                st.markdown(f"##### 🏆 シーズン戦績: **{wins}勝 {losses}敗 {draws}分**")
+                
                 rows = []
                 tp, tm2i, tm2a, tm3i, tm3a, tfi, tfa, tor, tdr, tast, tstl, tf, tto = 0,0,0,0,0,0,0,0,0,0,0,0,0
                 def fmt_stat(m, a): return f"{m}/{a}\n{(m/a*100):.0f}%" if a > 0 else "0/0\n0%"
@@ -782,7 +800,8 @@ def draw_season_tab():
                 
                 for match_id in match_order:
                     pdf = target_df[target_df['Match_ID'] == match_id]
-                    if pdf.empty: continue
+                    # 個人を選択していて、その試合に出ていない場合はスキップ
+                    if pdf.empty and target_scope != "チーム全体": continue
                     
                     m2i, m2a = len(pdf[(pdf['項目']=='2P') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='2P'])
                     m3i, m3a = len(pdf[(pdf['項目']=='3P') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='3P'])
@@ -800,8 +819,12 @@ def draw_season_tab():
                     layup = pdf[(pdf['項目']=='2P') & (pdf['詳細'].isin(['左レ', '右レ']))]
                     layup_i, layup_a = len(layup[layup['結果']=='成功']), len(layup)
                     
+                    # ★NEW：勝敗とスコアを追加して配列に格納！★
                     ts_rows.append({
-                        '試合名': match_id, 'Pts': pts,
+                        '試合名': match_id,
+                        '勝敗': match_info[match_id]['勝敗'],
+                        'スコア': match_info[match_id]['スコア'],
+                        'Pts': pts,
                         'FG': fmt_stat_inline(m2i+m3i, m2a+m3a), '3P': fmt_stat_inline(m3i, m3a), 'FT': fmt_stat_inline(fi, fa),
                         'OR': orb, 'DR': drb, 'As': ast, 'St': stl, 'F': f,
                         'TV': tv, 'DD': dd, 'PM(ﾊﾟｽﾐｽ)': pm, '24S': s24,
@@ -813,7 +836,7 @@ def draw_season_tab():
                     
                 ts_df = pd.DataFrame(ts_rows)
                 st.dataframe(ts_df.set_index('試合名'), use_container_width=True)
-                st.caption("💡 スワイプで横スクロール可能です。「G下(ｲﾝｻｲﾄﾞ)」は左下/中下/右下/中/中ミの合算、「ﾚｲｱｯﾌﾟ」は左レ/右レの合算です。")
+                st.caption("💡 スワイプで横スクロール可能です。「スコア」は [自チーム - 相手チーム] の点数です。")
 
                 # 📊 累積スタッツ (棒グラフ)
                 st.markdown(f"##### 📊 累積スタッツ 棒グラフ ({target_scope})")
@@ -852,7 +875,7 @@ def draw_season_tab():
                 line_chart = alt.Chart(ts_df).mark_line(point=True, color='#e74c3c', strokeWidth=3).encode(
                     x=alt.X('試合名:N', sort=match_order, title='', axis=alt.Axis(labelAngle=-45)),
                     y=alt.Y(f'{selected_stat}:Q', title=selected_stat),
-                    tooltip=['試合名', selected_stat]
+                    tooltip=['試合名', '勝敗', 'スコア', selected_stat]
                 ).properties(height=300)
                 
                 text = line_chart.mark_text(align='center', baseline='bottom', dy=-10, fontSize=14, fontWeight='bold').encode(
