@@ -10,7 +10,7 @@ import streamlit.components.v1 as components
 import datetime
 
 # ページ設定
-st.set_page_config(page_title="松浪ミニバス分析 V50.0", layout="centered")
+st.set_page_config(page_title="松浪ミニバス分析 V51.0", layout="centered")
 
 # --- 0. CSS注入 ---
 st.markdown("""
@@ -185,7 +185,6 @@ if 'app_init' not in st.session_state:
             for k, v in s.items(): st.session_state[k] = v
         except: pass
 
-# ★大改修：オンコート選手を記憶するカラムを追加★
 if 'history' not in st.session_state: 
     st.session_state.history = pd.DataFrame(columns=['id', 'Q', 'チーム', '名前', '項目', '詳細', '結果', '点数', 'オンコートH', 'オンコートA'])
 
@@ -214,7 +213,6 @@ def load_csv_data():
                 
             df.columns = [str(c).replace('\ufeff', '').strip() for c in df.columns]
             
-            # ★旧データの救済（オンコート列がない場合は空で追加）★
             if 'オンコートH' not in df.columns: df['オンコートH'] = ""
             if 'オンコートA' not in df.columns: df['オンコートA'] = ""
 
@@ -296,13 +294,12 @@ with st.sidebar:
     else:
         st.info("※見るだけモードのため、選手追加やデータリセット等の設定は行えません。")
 
-# --- 共通記録関数（オンコート自動保存対応） ---
+# --- 共通記録関数 ---
 def record(item, detail="-", res="成功", pts=0, team=None, name=None):
     t_name = team if team else st.session_state.tmp.get('team', 'UNKNOWN')
     p_name = name if name else (f"{st.session_state.tmp['player']}番" if 'player' in st.session_state.tmp else "TEAM")
     new_id = st.session_state.history['id'].max() + 1 if not st.session_state.history.empty else 1
     
-    # ★NEW：その瞬間のコート上の選手を文字として記憶★
     onc_h = ",".join(st.session_state.act_h)
     onc_a = ",".join(st.session_state.act_a)
     
@@ -491,7 +488,6 @@ def draw_simple_bar_chart(s, x_name, max_y, sort_order, color_range=None):
     chart = alt.layer(bars, text).properties(height=200)
     st.altair_chart(chart, use_container_width=True)
 
-# ★NEW：プラスマイナス(+/-)計算ヘルパー★
 def calculate_pm(p_num_str, target_team, df_events):
     if 'オンコートH' not in df_events.columns or 'オンコートA' not in df_events.columns: return 0
     pm = 0
@@ -585,7 +581,7 @@ def draw_report_body():
         rep_qs['Total'] = rep_qs.sum(axis=1); st.table(rep_qs.astype(int))
     except: pass
     
-    # --- ★NEW：ゲームフロー（点差推移）グラフ★ ---
+    # --- ★NEW & IMPROVED：ゲームフロー（点差推移）グラフ★ ---
     st.subheader("📊 ゲームフロー（点差推移）")
     flow_df = st.session_state.history[st.session_state.history['点数'] > 0].copy()
     if not flow_df.empty:
@@ -595,18 +591,38 @@ def draw_report_body():
         flow_df['点差'] = h_pts_cumsum - a_pts_cumsum
         flow_df['Play'] = flow_df['Q'] + " " + flow_df['チーム'] + " " + flow_df['点数'].astype(str) + "点"
         
-        start_row = pd.DataFrame([{'id': 0, '点差': 0, 'Play': 'Start', 'チーム': '-'}])
+        # X軸を等間隔にするための連番
+        flow_df['seq'] = range(1, len(flow_df) + 1)
+        
+        start_row = pd.DataFrame([{'seq': 0, '点差': 0, 'Play': 'Start', 'チーム': '-', 'Q': '1Q'}])
         plot_df = pd.concat([start_row, flow_df], ignore_index=True)
         plot_df['リード'] = plot_df['点差'].apply(lambda x: st.session_state.home_name if x > 0 else (st.session_state.away_name if x < 0 else '同点'))
         
         bar_chart = alt.Chart(plot_df).mark_bar(size=10).encode(
-            x=alt.X('id:O', title='得点プレイ順', axis=alt.Axis(labels=False, ticks=False)),
+            x=alt.X('seq:O', title='得点プレイ順', axis=alt.Axis(labels=False, ticks=False)),
             y=alt.Y('点差:Q', title=f'← {st.session_state.away_name} リード ｜ {st.session_state.home_name} リード →'),
             color=alt.Color('リード:N', scale=alt.Scale(domain=[st.session_state.home_name, '同点', st.session_state.away_name], range=['#3498db', '#bdc3c7', '#e74c3c']), legend=None),
             tooltip=['Play', '点差']
-        ).properties(height=250)
-        st.altair_chart(bar_chart, use_container_width=True)
-        st.caption("※ 上に伸びると松浪リード、下に伸びると相手リードです。試合の流れ（波）がわかります。")
+        )
+        
+        # ★各Qの最初の得点プレイを取得して区切り線とラベルを描画★
+        boundaries = plot_df.drop_duplicates(subset=['Q'], keep='first')
+        
+        rules = alt.Chart(boundaries).mark_rule(color='gray', strokeDash=[4, 4]).encode(
+            x=alt.X('seq:O')
+        )
+        
+        labels = alt.Chart(boundaries).mark_text(
+            align='left', baseline='bottom', dx=3, dy=-5, color='gray', fontSize=12, fontWeight='bold'
+        ).encode(
+            x=alt.X('seq:O'),
+            y=alt.value(0), # チャートの最上部に固定
+            text='Q:N'
+        )
+        
+        final_chart = alt.layer(bar_chart, rules, labels).properties(height=250)
+        st.altair_chart(final_chart, use_container_width=True)
+        st.caption("※ 上に伸びると松浪リード、下に伸びると相手リードです。縦の点線は各クォーターの開始を示します。")
     else:
         st.caption("得点データがありません")
 
@@ -702,13 +718,11 @@ def draw_report_body():
             p = pdf['点数'].sum()
             tp+=p; tm2i+=m2i; tm2a+=m2a; tm3i+=m3i; tm3a+=m3a; tfi+=fi; tfa+=fa; tor+=orb; tdr+=drb; tast+=ast; tstl+=stl; tf+=f; ttv+=tv; tdd+=dd; tpm+=pm; ts24+=s24
             
-            # ★NEW：+/- (プラスマイナス) の計算★
             pm_val = calculate_pm(p_num, t_name, st.session_state.history)
             
             rows.append({'#': p_num, 'Pts': p, '+/-': f"{pm_val:+}", 'FG\n(M/A)': fmt_stat(m2i+m3i, m2a+m3a), '3P\n(M/A)': fmt_stat(m3i, m3a), 'FT\n(M/A)': fmt_stat(fi, fa), 
                          'REB\n(D/O)': f"{drb+orb}\n({drb}/{orb})", 'As': ast, 'St': stl, 'F': f, 'TO\n(T/D/P/2)': f"{tv+dd+pm+s24}\n({tv}/{dd}/{pm}/{s24})", 'Team': t_name})
         
-        # チーム全体の点差を計算して Total の +/- に表示
         team_pts = st.session_state.history[st.session_state.history['チーム'] == t_name]['点数'].sum()
         opp_pts = st.session_state.history[st.session_state.history['チーム'] != t_name]['点数'].sum()
         total_pm = team_pts - opp_pts
@@ -734,7 +748,6 @@ def draw_report_body():
     csv_log = st.session_state.history.to_csv(index=False).encode('utf_8_sig')
     st.download_button("📜 ログCSV保存", csv_log, f"{prefix}_log.csv", "text/csv")
 
-# --- シーズン成績タブ ---
 def draw_season_tab():
     st.header("📈 シーズン成績 ＆ 時系列推移")
     st.write("過去の試合ログ(CSV)を複数読み込んで、チームの累計スタッツや選手の成長を分析できます。")
@@ -777,7 +790,6 @@ def draw_season_tab():
             if not h_season_df.empty:
                 st.success(f"✅ {len(dfs)}試合分のデータを読み込みました！ (対象: **{target_team}**)")
                 
-                # --- ★NEW：勝敗とスコアの事前計算★ ---
                 match_info = {}
                 wins, losses, draws = 0, 0, 0
                 for m_id in match_order:
@@ -798,7 +810,6 @@ def draw_season_tab():
                 s_players = sorted([p.replace('番','') for p in h_season_df['名前'].unique() if p != 'TEAM'], key=safe_sort_key)
                 
                 st.subheader(f"① {target_team} チーム全体スタッツ")
-                # ★NEW：チームのシーズン戦績表示★
                 st.markdown(f"##### 🏆 シーズン戦績: **{wins}勝 {losses}敗 {draws}分**")
                 
                 rows = []
@@ -818,7 +829,6 @@ def draw_season_tab():
                     
                     tp+=pts; tm2i+=m2i; tm2a+=m2a; tm3i+=m3i; tm3a+=m3a; tfi+=fi; tfa+=fa; tor+=orb; tdr+=drb; tast+=ast; tstl+=stl; tf+=f; tto+=to
                     
-                    # ★NEW：シーズン通算の +/- 計算★
                     pm_val = calculate_pm(p_num, target_team, season_df)
                     
                     rows.append({
@@ -879,7 +889,6 @@ def draw_season_tab():
                     layup = pdf[(pdf['項目']=='2P') & (pdf['詳細'].isin(['左レ', '右レ']))]
                     layup_i, layup_a = len(layup[layup['結果']=='成功']), len(layup)
                     
-                    # ★NEW：試合ごとの +/- 計算★
                     match_full_df = season_df[season_df['Match_ID'] == match_id]
                     pm_match = calculate_pm(target_scope, target_team, match_full_df) if target_scope != "チーム全体" else (match_full_df[match_full_df['チーム'] == target_team]['点数'].sum() - match_full_df[match_full_df['チーム'] != target_team]['点数'].sum())
                     
