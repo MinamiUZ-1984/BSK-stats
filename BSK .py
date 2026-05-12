@@ -10,7 +10,7 @@ import streamlit.components.v1 as components
 import datetime
 
 # ページ設定
-st.set_page_config(page_title="松浪ミニバス分析 V47.0", layout="centered")
+st.set_page_config(page_title="松浪ミニバス分析 V48.0", layout="centered")
 
 # --- 0. CSS注入 ---
 st.markdown("""
@@ -52,9 +52,9 @@ if 'read_only' not in st.session_state:
 
 # --- 使用者名ログイン＆ロック画面 ---
 if 'room_key' not in st.session_state:
-    st.title("🏀松浪ミニバス🗑️スコア分析👀")
+    st.title("🏀 バスケ分析🗑️🏀 松浪ミニバス🗑️ ")
     st.info("💡 **使用者名** を入力してスタートしてください。")
-    room_input = st.text_input("使用者名（例：記録担当A など）")
+    room_input = st.text_input("使用者名（例：記録担当 など）")
     col1, col2 = st.columns(2)
     if col1.button("🚪 記録者として入る", type="primary", use_container_width=True):
         if room_input.strip() == "": st.error("使用者名を入力してください！")
@@ -78,8 +78,8 @@ if 'room_key' not in st.session_state:
             st.rerun()
     if st.session_state.get('show_lock_warning'):
         warn_room = st.session_state.show_lock_warning
-        st.warning(f"⚠️ 使用者名「{warn_room}」は現在他の人が記録中です！\n\n・「👀 見るだけモード」で入るか、別の使用者名にしてください。")
-        if st.button("🚨 強制的に記録者として奪う（前の人がアプリを閉じた場合）"):
+        st.warning(f"⚠️ 使用者名「{warn_room}」は現在他の人が記録中です！")
+        if st.button("🚨 強制的に記録者として奪う"):
             with open(f"lock_{warn_room}.txt", "w") as f: f.write(st.session_state.user_id)
             st.session_state.room_key = warn_room
             st.session_state.read_only = False
@@ -87,7 +87,7 @@ if 'room_key' not in st.session_state:
             st.rerun()
     st.stop() 
 
-# --- 使用者名に基づいた専用のファイル名 ---
+# --- 設定・ログファイル名 ---
 ROOM = st.session_state.room_key
 LOG_FILE = f"auto_save_log_{ROOM}.csv"
 SET_FILE = f"auto_save_settings_{ROOM}.json"
@@ -189,7 +189,6 @@ if 'history' not in st.session_state: st.session_state.history = pd.DataFrame(co
 if 'match_date' not in st.session_state: st.session_state.match_date = datetime.date.today().strftime("%Y%m%d")
 if 'match_number' not in st.session_state: st.session_state.match_number = "01"
 if 'tournament_name' not in st.session_state: st.session_state.tournament_name = "練習試合"
-# ★デフォルトHOMEチーム名を「松浪」に設定★
 if 'home_name' not in st.session_state: st.session_state.home_name = "松浪"
 if 'away_name' not in st.session_state: st.session_state.away_name = "AWAY"
 if 'r_str_h' not in st.session_state: st.session_state.r_str_h = "4,5,6,7,8,9,10,11,12,13,14,15"
@@ -201,12 +200,18 @@ if 'mode' not in st.session_state: st.session_state.mode = "選手選択"
 if 'tmp' not in st.session_state: st.session_state.tmp = {}
 if 'report_trigger' not in st.session_state: st.session_state.report_trigger = False
 
+# ★大改修：Excel編集による文字コード問題（Shift-JIS）に完全対応！★
 def load_csv_data():
     if st.session_state.uploaded_file is not None:
         try:
             file_bytes = st.session_state.uploaded_file.getvalue()
-            try: df = pd.read_csv(io.BytesIO(file_bytes), encoding='utf_8_sig')
-            except: df = pd.read_csv(io.BytesIO(file_bytes))
+            # 1. まず標準の utf_8_sig で読み込みを試みる
+            try: 
+                df = pd.read_csv(io.BytesIO(file_bytes), encoding='utf_8_sig')
+            # 2. エラー（Excel編集済み）なら自動的に Shift-JIS(cp932) で読み込む
+            except UnicodeDecodeError: 
+                df = pd.read_csv(io.BytesIO(file_bytes), encoding='cp932')
+                
             df.columns = [str(c).replace('\ufeff', '').strip() for c in df.columns]
 
             if set(['id', 'Q', 'チーム', '名前', '項目', '詳細', '結果', '点数']).issubset(df.columns):
@@ -255,15 +260,13 @@ with st.sidebar:
     if not st.session_state.read_only:
         st.header("🏆 試合設定")
         col_date, col_num = st.columns([2, 1])
-        # ★大改修：日時の例を削除し、高さを完全に揃える★
         col_date.text_input("📅 日時", key="match_date")
         col_num.text_input("🔢 試合目", key="match_number")
         st.text_input("📝 大会名", key="tournament_name")
         st.divider()
         
-        # ★大改修：自チーム名入力欄を復活（デフォルトは「松浪」）★
-        st.text_input("自チーム名", key="home_name")
-        st.text_input(f"🔵 新規選手を追加", placeholder="例: 13。", key="new_h_input")
+        st.text_input("🔵 自チーム名", key="home_name")
+        st.text_input(f"🔵 新規選手を追加", placeholder="例: 13", key="new_h_input")
         st.button("＋追加＆出場", key="add_h", use_container_width=True, on_click=add_h_player)
         with st.expander(f"👥 {st.session_state.home_name} 名簿を手動編集"): st.text_area("全背番号 (カンマ区切り)", key="r_str_h")
         all_h = [x.strip() for x in st.session_state.r_str_h.split(",") if x.strip()]
@@ -273,7 +276,8 @@ with st.sidebar:
         st.divider()
         st.button("🔁 HOMEとAWAYを入れ替える", use_container_width=True, on_click=swap_teams)
         st.divider()
-        st.text_input("相手チーム名", key="away_name")
+        
+        st.text_input("🔴 相手チーム名", key="away_name")
         st.text_input(f"🔴 新規選手を追加", placeholder="例: ⑨", key="new_a_input")
         st.button("＋追加＆出場", key="add_a", use_container_width=True, on_click=add_a_player)
         with st.expander(f"👥 {st.session_state.away_name} 名簿を手動編集"): st.text_area("全背番号 (カンマ区切り)", key="r_str_a")
@@ -667,19 +671,17 @@ def draw_report_body():
     st.header("5. 詳細ログ")
     st.dataframe(st.session_state.history.iloc[::-1], use_container_width=True)
     
-    # ★大改修：ダウンロード時のファイル名を自動で組み上げ！★
     prefix = f"{st.session_state.match_date}_{st.session_state.match_number}_{st.session_state.tournament_name}"
     csv_stats = pd.concat([h_df, a_df], ignore_index=True).to_csv(index=False).encode('utf_8_sig')
     st.download_button("📊 統計CSV保存", csv_stats, f"{prefix}_stats.csv", "text/csv")
     csv_log = st.session_state.history.to_csv(index=False).encode('utf_8_sig')
     st.download_button("📜 ログCSV保存", csv_log, f"{prefix}_log.csv", "text/csv")
 
-# --- シーズン成績タブ ---
+# --- ★大改修：シーズン成績タブ (Excelエラー完全対応版)★ ---
 def draw_season_tab():
     st.header("📈 シーズン成績 ＆ 時系列推移")
-    st.write("過去の試合ログ(CSV)を複数読み込んで、チームの累計スタッツや選手の成長を分析できます。")
+    st.write(f"過去の試合ログ(CSV)を複数読み込んで、**{st.session_state.home_name}** の累計スタッツや成長を分析します。")
     
-    # ★大改修：分析対象チーム名を現在設定されているhome_nameをデフォルトにして表示★
     target_team = st.text_input("🔍 分析対象チーム名（HOME）を入力", value=st.session_state.home_name, key="season_target_team")
     
     st.caption("※ファイル名のアルファベット・数字順（例: `20240415_01_試合.csv`）に自動で時系列化されます。")
@@ -690,7 +692,14 @@ def draw_season_tab():
         match_order = []
         for idx, file in enumerate(sorted(season_files, key=lambda x: x.name)):
             try:
-                df = pd.read_csv(file)
+                # 1. UTF-8で読み込み
+                try: 
+                    df = pd.read_csv(file, encoding='utf_8_sig')
+                # 2. エラーならShift-JISで読み込み
+                except UnicodeDecodeError: 
+                    file.seek(0)
+                    df = pd.read_csv(file, encoding='cp932')
+                    
                 df.columns = [str(c).replace('\ufeff', '').strip() for c in df.columns]
                 if 'チーム' in df.columns:
                     away_teams = [str(t).strip() for t in df['チーム'].unique() if str(t).strip() != target_team and str(t).upper() != 'UNKNOWN']
