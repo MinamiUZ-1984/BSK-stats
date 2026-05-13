@@ -16,7 +16,7 @@ st.set_page_config(page_title="松浪ミニバス分析 V59.0", layout="centered
 # ==========================================
 # ★ここに実際のアプリのURLを入力してください★
 # ==========================================
-APP_URL = "https://your-app-url.streamlit.app" 
+APP_URL = "https://bsk-stats.streamlit.app/" 
 
 # --- 0. CSS注入 ---
 st.markdown("""
