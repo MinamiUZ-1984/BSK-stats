@@ -11,7 +11,7 @@ import datetime
 import urllib.parse
 
 # ページ設定
-st.set_page_config(page_title="松浪ミニバス分析 V55.0", layout="centered")
+st.set_page_config(page_title="松浪ミニバス分析 V56.0", layout="centered")
 
 # ==========================================
 # ★ここに実際のアプリのURLを入力してください★
@@ -346,6 +346,7 @@ def draw_flat_zone(c_o, c_lbl, c_x, area_name, key_prefix, item_type):
             st.session_state.mode = "リバウンド選択"
             safe_rerun()
 
+# ★大改修：操作メニューをカテゴリー別に色分け＆グループ化★
 def draw_action_menu():
     player_num = st.session_state.tmp.get('player')
     team_name = st.session_state.tmp.get('team')
@@ -354,26 +355,40 @@ def draw_action_menu():
     st.markdown(f"<div class='center-panel-title'>{t_icon} {team_name} : #{player_num} 操作パネル</div>", unsafe_allow_html=True)
     with st.container(border=True):
         if st.session_state.mode == "項目選択":
+            
+            # --- 1段目：シュート系（赤色） ---
+            st.markdown("<div style='font-size:12px; font-weight:bold; color:#e74c3c; margin-bottom:4px;'>🔥 シュート</div>", unsafe_allow_html=True)
             c = st.columns(3)
             if c[0].button("2P", use_container_width=True, type="primary"): st.session_state.tmp['item']="2P"; st.session_state.mode="エリア＆結果選択"; safe_rerun()
             if c[1].button("3P", use_container_width=True, type="primary"): st.session_state.tmp['item']="3P"; st.session_state.mode="エリア＆結果選択"; safe_rerun()
-            if c[2].button("FT", use_container_width=True): st.session_state.tmp['item']="FT"; st.session_state.mode="結果選択"; safe_rerun()
+            if c[2].button("FT", use_container_width=True, type="primary"): st.session_state.tmp['item']="FT"; st.session_state.mode="結果選択"; safe_rerun()
             
-            # ★大改修：ハッスルスタッツ（BLK, DEF）を4列で追加★
+            st.markdown("<div style='margin-bottom:12px;'></div>", unsafe_allow_html=True)
+            
+            # --- 2段目：リバウンド・チャンス・守備・反則 ---
             o = st.columns(4)
             with o[0]:
+                st.markdown("<div style='font-size:11px; font-weight:bold; color:#3498db; text-align:center; margin-bottom:2px;'>♻️ リバウンド</div>", unsafe_allow_html=True)
                 if st.button("OR", use_container_width=True): record("OR"); safe_rerun()
                 if st.button("DR", use_container_width=True): record("DR"); safe_rerun()
             with o[1]:
+                st.markdown("<div style='font-size:11px; font-weight:bold; color:#2ecc71; text-align:center; margin-bottom:2px;'>⚡ チャンス</div>", unsafe_allow_html=True)
                 if st.button("AST", use_container_width=True): record("AST"); safe_rerun()
                 if st.button("STL", use_container_width=True): record("STL"); safe_rerun()
             with o[2]:
+                st.markdown("<div style='font-size:11px; font-weight:bold; color:#9b59b6; text-align:center; margin-bottom:2px;'>🛡️ 守備</div>", unsafe_allow_html=True)
                 if st.button("BLK", use_container_width=True): record("BLK"); safe_rerun()
                 if st.button("DEF", use_container_width=True): record("DEF"); safe_rerun()
             with o[3]:
+                st.markdown("<div style='font-size:11px; font-weight:bold; color:#f39c12; text-align:center; margin-bottom:2px;'>⚠️ 反則</div>", unsafe_allow_html=True)
                 if st.button("F", use_container_width=True): record("Foul"); safe_rerun()
+                # ボタン高さを揃えるためのダミー空間
+                st.markdown("<div style='height:52px;'></div>", unsafe_allow_html=True)
                 
-            st.write("▼ TurnOver")
+            st.markdown("<div style='margin-bottom:12px;'></div>", unsafe_allow_html=True)
+            
+            # --- 3段目：ターンオーバー ---
+            st.markdown("<div style='font-size:12px; font-weight:bold; color:#7f8c8d; margin-bottom:4px;'>💥 ターンオーバー (TO)</div>", unsafe_allow_html=True)
             to_cols = st.columns(4)
             for i, val in enumerate(["TV", "DD", "PM", "24S"]):
                 if to_cols[i].button(val, use_container_width=True): record("TO", val); safe_rerun()
@@ -584,10 +599,7 @@ def generate_coach_advice(df, home_name, away_name):
     h_reb, a_reb = h_or + h_dr, a_or + a_dr
     h_ast = len(h_df[h_df['項目'] == 'AST']); h_to = len(h_df[h_df['項目'] == 'TO'])
     h_pm = len(h_df[(h_df['項目'] == 'TO') & (h_df['詳細'] == 'PM')]); h_foul = len(h_df[h_df['項目'] == 'Foul'])
-    
-    # ★NEW：アドバイスにブロックとディフレクションを追加★
-    h_blk = len(h_df[h_df['項目'] == 'BLK'])
-    h_def = len(h_df[h_df['項目'] == 'DEF'])
+    h_blk = len(h_df[h_df['項目'] == 'BLK']); h_def = len(h_df[h_df['項目'] == 'DEF'])
 
     if h_3p_pct >= 0.33 and len(h_3p) >= 3: good.append(f"🎯 **外角のシュートタッチが良好！** (3P成功率: {h_3p_pct*100:.1f}%) この調子でスペーシングを広く保ちましょう。")
     if h_or > a_or and h_or >= 3: good.append(f"💪 **オフェンスリバウンドで圧倒！** ({h_or}本) 泥臭いプレイがセカンドチャンスを生んでいます。")
