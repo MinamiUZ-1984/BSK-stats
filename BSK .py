@@ -11,13 +11,12 @@ import datetime
 import urllib.parse
 
 # ページ設定
-st.set_page_config(page_title="松浪ミニバス分析 V57.0", layout="centered")
+st.set_page_config(page_title="松浪ミニバス分析 V58.1", layout="centered")
 
 # ==========================================
 # ★ここに実際のアプリのURLを入力してください★
 # ==========================================
 APP_URL = "https://your-app-url.streamlit.app" 
-
 
 # --- 0. CSS注入 ---
 st.markdown("""
@@ -97,7 +96,7 @@ if 'room_key' not in st.session_state:
     with st.expander("📱 このアプリをシェアする（QRコード）"):
         st.caption("以下のQRコードを読み取るか、URLをコピーしてLINE等で送ってください。")
         encoded_url = urllib.parse.quote(APP_URL)
-        st.image(f"https://api.qrserver.com/v1/create-qr-code/?size=150x150&data={encoded_url}")
+        st.image(f"https://api.qrserver.com/v1/create-qr-code/?size=150x150&data={encoded_url}", use_container_width=True)
         st.code(APP_URL, language="text")
         st.caption("↑ 右上のアイコンをタップでURLをコピーできます！")
         
@@ -218,24 +217,23 @@ if 'mode' not in st.session_state: st.session_state.mode = "選手選択"
 if 'tmp' not in st.session_state: st.session_state.tmp = {}
 if 'report_trigger' not in st.session_state: st.session_state.report_trigger = False
 
+# --- 汎用CSV読み込み関数（文字コード自動判別付） ---
+def parse_csv_bytes(file_bytes):
+    try: 
+        df = pd.read_csv(io.BytesIO(file_bytes), encoding='utf_8_sig')
+    except UnicodeDecodeError: 
+        df = pd.read_csv(io.BytesIO(file_bytes), encoding='cp932')
+    df.columns = [str(c).replace('\ufeff', '').strip() for c in df.columns]
+    if 'オンコートH' not in df.columns: df['オンコートH'] = ""
+    if 'オンコートA' not in df.columns: df['オンコートA'] = ""
+    df['点数'] = pd.to_numeric(df['点数'], errors='coerce').fillna(0).astype(int)
+    return df
+
 def load_csv_data():
     if st.session_state.uploaded_file is not None:
         try:
-            file_bytes = st.session_state.uploaded_file.getvalue()
-            try: 
-                df = pd.read_csv(io.BytesIO(file_bytes), encoding='utf_8_sig')
-            except UnicodeDecodeError: 
-                df = pd.read_csv(io.BytesIO(file_bytes), encoding='cp932')
-                
-            df.columns = [str(c).replace('\ufeff', '').strip() for c in df.columns]
-            
-            if 'オンコートH' not in df.columns: df['オンコートH'] = ""
-            if 'オンコートA' not in df.columns: df['オンコートA'] = ""
-
+            df = parse_csv_bytes(st.session_state.uploaded_file.getvalue())
             if set(['id', 'Q', 'チーム', '名前', '項目', '詳細', '結果', '点数']).issubset(df.columns):
-                df['チーム'] = df['チーム'].astype(str).str.strip()
-                df['名前'] = df['名前'].astype(str).str.strip()
-                df['点数'] = pd.to_numeric(df['点数'], errors='coerce').fillna(0).astype(int)
                 st.session_state.history = df
                 teams = [t for t in df['チーム'].unique() if t and str(t).upper() != 'UNKNOWN']
                 csv_h, csv_a = st.session_state.home_name, st.session_state.away_name
@@ -399,23 +397,23 @@ def draw_action_menu():
             if it == "2P":
                 st.markdown("<div style='text-align:center;'><span class='court-zone'>【 2P エリア 】</span></div>", unsafe_allow_html=True)
                 
-                # ★大改修(V57.0)：レイアップ(レ)をリング(🗑️)の真横の最前列に、ゴール下(下)をその後方に配置入れ替え！★
+                # レイアップを最前列（リング横）に配置
                 r1 = st.columns([11,16,11, 4, 11,16,11, 10, 11,16,11, 4, 11,16,11])
                 draw_flat_zone(r1[0], r1[1], r1[2], "左角", "2p_lcor", "2P")
-                draw_flat_zone(r1[4], r1[5], r1[6], "左レ", "2p_ll", "2P") # ゴール左横
+                draw_flat_zone(r1[4], r1[5], r1[6], "左レ", "2p_ll", "2P") 
                 with r1[7]:
                     st.markdown("<div style='text-align:center; font-size:24px; line-height:48px; margin:0px;'>🗑️</div>", unsafe_allow_html=True)
-                draw_flat_zone(r1[8], r1[9], r1[10], "右レ", "2p_rl", "2P") # ゴール右横
+                draw_flat_zone(r1[8], r1[9], r1[10], "右レ", "2p_rl", "2P") 
                 draw_flat_zone(r1[12], r1[13], r1[14], "右角", "2p_rcor", "2P")
 
                 r2 = st.columns([16, 11,16,11, 12, 11,16,11, 12, 11,16,11, 16])
-                draw_flat_zone(r2[1], r2[2], r2[3], "左下", "2p_lbl", "2P") # レイアップの後方
-                draw_flat_zone(r2[5], r2[6], r2[7], "中レ", "2p_cl", "2P")  # ゴール正面レイアップ
-                draw_flat_zone(r2[9], r2[10], r2[11], "右下", "2p_rbl", "2P") # レイアップの後方
+                draw_flat_zone(r2[1], r2[2], r2[3], "左下", "2p_lbl", "2P") 
+                draw_flat_zone(r2[5], r2[6], r2[7], "中レ", "2p_cl", "2P")  
+                draw_flat_zone(r2[9], r2[10], r2[11], "右下", "2p_rbl", "2P") 
 
                 r3 = st.columns([16, 11,16,11, 12, 11,16,11, 12, 11,16,11, 16])
                 draw_flat_zone(r3[1], r3[2], r3[3], "左45", "2p_l45", "2P")
-                draw_flat_zone(r3[5], r3[6], r3[7], "中下", "2p_cbl", "2P") # ゴール下正面
+                draw_flat_zone(r3[5], r3[6], r3[7], "中下", "2p_cbl", "2P") 
                 draw_flat_zone(r3[9], r3[10], r3[11], "右45", "2p_r45", "2P")
 
                 r4 = st.columns([16, 11,16,11, 12, 11,16,11, 12, 11,16,11, 16])
@@ -504,6 +502,7 @@ def draw_stacked_chart(df, x_col, max_y):
         tooltip=[f"{x_col}:N", '結果:N', '回数:Q']
     )
     
+    # 成功数/合計数（Make/Attempt）のテキストを作成
     df_txt = df.copy()
     if '成功' not in df_txt.columns: df_txt['成功'] = 0
     if '失敗' not in df_txt.columns: df_txt['失敗'] = 0
@@ -627,19 +626,19 @@ def generate_coach_advice(df, home_name, away_name):
     html += "</div>"
     return html
 
-def draw_report_body():
+def draw_report_body(df_history, home_name, away_name):
     st.header("1. スコア推移")
     try:
-        rep_qs = st.session_state.history.groupby(['チーム', 'Q'])['点数'].sum().unstack(fill_value=0).reindex(index=[st.session_state.home_name, st.session_state.away_name], columns=["1Q", "2Q", "3Q", "4Q", "OT"], fill_value=0)
+        rep_qs = df_history.groupby(['チーム', 'Q'])['点数'].sum().unstack(fill_value=0).reindex(index=[home_name, away_name], columns=["1Q", "2Q", "3Q", "4Q", "OT"], fill_value=0)
         rep_qs['Total'] = rep_qs.sum(axis=1); st.table(rep_qs.astype(int))
     except: pass
     
     st.subheader("📊 ゲームフロー（点差推移）")
-    flow_df = st.session_state.history[st.session_state.history['点数'] > 0].copy()
+    flow_df = df_history[df_history['点数'] > 0].copy()
     if not flow_df.empty:
         flow_df = flow_df.sort_values('id').reset_index(drop=True)
-        h_pts_cumsum = (flow_df['点数'] * (flow_df['チーム'] == st.session_state.home_name)).cumsum()
-        a_pts_cumsum = (flow_df['点数'] * (flow_df['チーム'] == st.session_state.away_name)).cumsum()
+        h_pts_cumsum = (flow_df['点数'] * (flow_df['チーム'] == home_name)).cumsum()
+        a_pts_cumsum = (flow_df['点数'] * (flow_df['チーム'] == away_name)).cumsum()
         flow_df['点差'] = h_pts_cumsum - a_pts_cumsum
         flow_df['Play'] = flow_df['Q'] + " " + flow_df['チーム'] + " " + flow_df['点数'].astype(str) + "点"
         
@@ -647,12 +646,12 @@ def draw_report_body():
         
         start_row = pd.DataFrame([{'seq': 0, '点差': 0, 'Play': 'Start', 'チーム': '-', 'Q': '1Q'}])
         plot_df = pd.concat([start_row, flow_df], ignore_index=True)
-        plot_df['リード'] = plot_df['点差'].apply(lambda x: st.session_state.home_name if x > 0 else (st.session_state.away_name if x < 0 else '同点'))
+        plot_df['リード'] = plot_df['点差'].apply(lambda x: home_name if x > 0 else (away_name if x < 0 else '同点'))
         
         bar_chart = alt.Chart(plot_df).mark_bar(size=10).encode(
             x=alt.X('seq:O', title='得点プレイ順', axis=alt.Axis(labels=False, ticks=False)),
-            y=alt.Y('点差:Q', title=f'← {st.session_state.away_name} リード ｜ {st.session_state.home_name} リード →'),
-            color=alt.Color('リード:N', scale=alt.Scale(domain=[st.session_state.home_name, '同点', st.session_state.away_name], range=['#3498db', '#bdc3c7', '#e74c3c']), legend=None),
+            y=alt.Y('点差:Q', title=f'← {away_name} リード ｜ {home_name} リード →'),
+            color=alt.Color('リード:N', scale=alt.Scale(domain=[home_name, '同点', away_name], range=['#3498db', '#bdc3c7', '#e74c3c']), legend=None),
             tooltip=['Play', '点差']
         )
         
@@ -672,22 +671,22 @@ def draw_report_body():
         
         final_chart = alt.layer(bar_chart, rules, labels).properties(height=250)
         st.altair_chart(final_chart, use_container_width=True)
-        st.caption("※ 上に伸びると松浪リード、下に伸びると相手リードです。縦の点線は各クォーターの開始を示します。")
+        st.caption("※ 上に伸びると自チームリード、下に伸びると相手リードです。縦の点線は各クォーターの開始を示します。")
     else:
         st.caption("得点データがありません")
 
     st.header("2. 分析グラフ")
     selected_q_graph = st.radio("グラフ対象期間", ["Total", "1Q", "2Q", "3Q", "4Q", "OT"], horizontal=True, label_visibility="collapsed")
-    if selected_q_graph == "Total": filtered_history = st.session_state.history
-    else: filtered_history = st.session_state.history[st.session_state.history['Q'] == selected_q_graph]
-    h_players = ["全体"] + sorted([p.replace('番','') for p in filtered_history[filtered_history['チーム']==st.session_state.home_name]['名前'].unique() if p != 'TEAM'], key=safe_sort_key)
-    sel_h = st.radio(f"🔵 {st.session_state.home_name} 選手選択", h_players, horizontal=True, label_visibility="collapsed")
-    a_players = ["全体"] + sorted([p.replace('番','') for p in filtered_history[filtered_history['チーム']==st.session_state.away_name]['名前'].unique() if p != 'TEAM'], key=safe_sort_key)
-    sel_a = st.radio(f"🔴 {st.session_state.away_name} 選手選択", a_players, horizontal=True, label_visibility="collapsed")
+    if selected_q_graph == "Total": filtered_history = df_history
+    else: filtered_history = df_history[df_history['Q'] == selected_q_graph]
+    h_players = ["全体"] + sorted([p.replace('番','') for p in filtered_history[filtered_history['チーム']==home_name]['名前'].unique() if p != 'TEAM'], key=safe_sort_key)
+    sel_h = st.radio(f"🔵 {home_name} 選手選択", h_players, horizontal=True, label_visibility="collapsed")
+    a_players = ["全体"] + sorted([p.replace('番','') for p in filtered_history[filtered_history['チーム']==away_name]['名前'].unique() if p != 'TEAM'], key=safe_sort_key)
+    sel_a = st.radio(f"🔴 {away_name} 選手選択", a_players, horizontal=True, label_visibility="collapsed")
 
-    df_h_graph = filtered_history[filtered_history['チーム'] == st.session_state.home_name]
+    df_h_graph = filtered_history[filtered_history['チーム'] == home_name]
     if sel_h != "全体": df_h_graph = df_h_graph[df_h_graph['名前'] == f"{sel_h}番"]
-    df_a_graph = filtered_history[filtered_history['チーム'] == st.session_state.away_name]
+    df_a_graph = filtered_history[filtered_history['チーム'] == away_name]
     if sel_a != "全体": df_a_graph = df_a_graph[df_a_graph['名前'] == f"{sel_a}番"]
 
     st.subheader(f"① 全体シュート ({selected_q_graph})")
@@ -696,11 +695,11 @@ def draw_report_body():
     max_y_overall = int(max_y_overall * 1.15) + 1 if max_y_overall > 0 else 5
     g1, g2 = st.columns(2)
     with g1:
-        st.write(f"🔵 **{sel_h}**" if sel_h != "全体" else f"🔵 **{st.session_state.home_name}**")
+        st.write(f"🔵 **{sel_h}**" if sel_h != "全体" else f"🔵 **{home_name}**")
         if s_stats_h.sum().sum() > 0: draw_stacked_chart(s_stats_h, '項目', max_y_overall)
         else: st.caption("データなし")
     with g2:
-        st.write(f"🔴 **{sel_a}**" if sel_a != "全体" else f"🔴 **{st.session_state.away_name}**")
+        st.write(f"🔴 **{sel_a}**" if sel_a != "全体" else f"🔴 **{away_name}**")
         if s_stats_a.sum().sum() > 0: draw_stacked_chart(s_stats_a, '項目', max_y_overall)
         else: st.caption("データなし")
 
@@ -712,11 +711,11 @@ def draw_report_body():
     max_y_area = int(max_y_area * 1.15) + 1 if max_y_area > 0 else 5
     ga1, ga2 = st.columns(2)
     with ga1:
-        st.write(f"🔵 **{sel_h}**" if sel_h != "全体" else f"🔵 **{st.session_state.home_name}**")
+        st.write(f"🔵 **{sel_h}**" if sel_h != "全体" else f"🔵 **{home_name}**")
         if a_stats_h.sum().sum() > 0: draw_stacked_chart(a_stats_h, '詳細', max_y_area)
         else: st.caption("データなし")
     with ga2:
-        st.write(f"🔴 **{sel_a}**" if sel_a != "全体" else f"🔴 **{st.session_state.away_name}**")
+        st.write(f"🔴 **{sel_a}**" if sel_a != "全体" else f"🔴 **{away_name}**")
         if a_stats_a.sum().sum() > 0: draw_stacked_chart(a_stats_a, '詳細', max_y_area)
         else: st.caption("データなし")
 
@@ -726,11 +725,11 @@ def draw_report_body():
     max_y_reb = int(max_y_reb * 1.15) + 1 if max_y_reb > 0 else 5
     gr1, gr2 = st.columns(2)
     with gr1:
-        st.write(f"🔵 **{sel_h}**" if sel_h != "全体" else f"🔵 **{st.session_state.home_name}**")
+        st.write(f"🔵 **{sel_h}**" if sel_h != "全体" else f"🔵 **{home_name}**")
         if r_stats_h.sum() > 0: draw_simple_bar_chart(r_stats_h, '種類', max_y_reb, ['OR', 'DR', 'Total'], ['#ff9f43', '#3498db', '#2ecc71'])
         else: st.caption("データなし")
     with gr2:
-        st.write(f"🔴 **{sel_a}**" if sel_a != "全体" else f"🔴 **{st.session_state.away_name}**")
+        st.write(f"🔴 **{sel_a}**" if sel_a != "全体" else f"🔴 **{away_name}**")
         if r_stats_a.sum() > 0: draw_simple_bar_chart(r_stats_a, '種類', max_y_reb, ['OR', 'DR', 'Total'], ['#ff9f43', '#3498db', '#2ecc71'])
         else: st.caption("データなし")
 
@@ -740,20 +739,20 @@ def draw_report_body():
     max_y_to = int(max_y_to * 1.15) + 1 if max_y_to > 0 else 5
     gt1, gt2 = st.columns(2)
     with gt1:
-        st.write(f"🔵 **{sel_h}**" if sel_h != "全体" else f"🔵 **{st.session_state.home_name}**")
+        st.write(f"🔵 **{sel_h}**" if sel_h != "全体" else f"🔵 **{home_name}**")
         if to_stats_h.sum() > 0: draw_simple_bar_chart(to_stats_h, '詳細', max_y_to, ['TV', 'DD', 'PM', '24S', 'Total'], ['#95a5a6', '#95a5a6', '#95a5a6', '#95a5a6', '#e74c3c'])
         else: st.caption("データなし")
     with gt2:
-        st.write(f"🔴 **{sel_a}**" if sel_a != "全体" else f"🔴 **{st.session_state.away_name}**")
+        st.write(f"🔴 **{sel_a}**" if sel_a != "全体" else f"🔴 **{away_name}**")
         if to_stats_a.sum() > 0: draw_simple_bar_chart(to_stats_a, '詳細', max_y_to, ['TV', 'DD', 'PM', '24S', 'Total'], ['#95a5a6', '#95a5a6', '#95a5a6', '#95a5a6', '#e74c3c'])
         else: st.caption("データなし")
 
     st.header("3. 個人スタッツ")
-    all_h = [x.strip() for x in st.session_state.r_str_h.split(",") if x.strip()]
-    all_a = [x.strip() for x in st.session_state.r_str_a.split(",") if x.strip()]
+    all_h = sorted([p.replace('番','') for p in df_history[df_history['チーム']==home_name]['名前'].unique() if p != 'TEAM'], key=safe_sort_key)
+    all_a = sorted([p.replace('番','') for p in df_history[df_history['チーム']==away_name]['名前'].unique() if p != 'TEAM'], key=safe_sort_key)
 
     def get_stats_df(t_name, p_list_all):
-        df = st.session_state.history[st.session_state.history['チーム'] == t_name]
+        df = df_history[df_history['チーム'] == t_name]
         rows = []
         tp, tm2i, tm2a, tm3i, tm3a, tfi, tfa, tor, tdr, tast, tstl, tblk, tdef, tf, ttv, tdd, tpm, ts24 = [0]*18
         def fmt_stat(m, a): return f"{m}/{a}\n{(m/a*100):.0f}%" if a > 0 else "0/0\n0%"
@@ -770,36 +769,31 @@ def draw_report_body():
             p = pdf['点数'].sum()
             tp+=p; tm2i+=m2i; tm2a+=m2a; tm3i+=m3i; tm3a+=m3a; tfi+=fi; tfa+=fa; tor+=orb; tdr+=drb; tast+=ast; tstl+=stl; tblk+=blk; tdef+=deflection; tf+=f; ttv+=tv; tdd+=dd; tpm+=pm; ts24+=s24
             
-            pm_val = calculate_pm(p_num, t_name, st.session_state.history)
+            pm_val = calculate_pm(p_num, t_name, df_history)
             
             rows.append({'#': p_num, 'Pts': p, '+/-': f"{pm_val:+}", 'FG\n(M/A)': fmt_stat(m2i+m3i, m2a+m3a), '3P\n(M/A)': fmt_stat(m3i, m3a), 'FT\n(M/A)': fmt_stat(fi, fa), 
                          'REB\n(D/O)': f"{drb+orb}\n({drb}/{orb})", 'As': ast, 'St': stl, 'Blk': blk, 'Def': deflection, 'F': f, 'TO\n(T/D/P/2)': f"{tv+dd+pm+s24}\n({tv}/{dd}/{pm}/{s24})", 'Team': t_name})
         
-        team_pts = st.session_state.history[st.session_state.history['チーム'] == t_name]['点数'].sum()
-        opp_pts = st.session_state.history[st.session_state.history['チーム'] != t_name]['点数'].sum()
+        team_pts = df_history[df_history['チーム'] == t_name]['点数'].sum()
+        opp_pts = df_history[df_history['チーム'] != t_name]['点数'].sum()
         total_pm = team_pts - opp_pts
         
         rows.append({'#': 'Total', 'Pts': tp, '+/-': f"{total_pm:+}", 'FG\n(M/A)': fmt_stat(tm2i+tm3i, tm2a+tm3a), '3P\n(M/A)': fmt_stat(tm3i, tm3a), 'FT\n(M/A)': fmt_stat(tfi, tfa), 
                      'REB\n(D/O)': f"{tdr+tor}\n({tdr}/{tor})", 'As': tast, 'St': tstl, 'Blk': tblk, 'Def': tdef, 'F': tf, 'TO\n(T/D/P/2)': f"{ttv+tdd+tpm+ts24}\n({ttv}/{tdd}/{tpm}/{ts24})", 'Team': t_name})
         return pd.DataFrame(rows)
     
-    h_df = get_stats_df(st.session_state.home_name, all_h); a_df = get_stats_df(st.session_state.away_name, all_a)
-    st.write(f"🔵 **{st.session_state.home_name}**"); st.table(h_df.drop(columns='Team').set_index('#'))
-    st.write(f"🔴 **{st.session_state.away_name}**"); st.table(a_df.drop(columns='Team').set_index('#'))
+    h_df = get_stats_df(home_name, all_h); a_df = get_stats_df(away_name, all_a)
+    st.write(f"🔵 **{home_name}**"); st.table(h_df.drop(columns='Team').set_index('#'))
+    st.write(f"🔴 **{away_name}**"); st.table(a_df.drop(columns='Team').set_index('#'))
     st.divider()
     st.header("4. 💡 分析結果コメント（自動アドバイス）")
-    advice_html = generate_coach_advice(filtered_history, st.session_state.home_name, st.session_state.away_name)
+    advice_html = generate_coach_advice(filtered_history, home_name, away_name)
     st.markdown(advice_html, unsafe_allow_html=True)
     st.divider()
     st.header("5. 詳細ログ")
-    st.dataframe(st.session_state.history.iloc[::-1], use_container_width=True)
-    
-    prefix = f"{st.session_state.match_date}_{st.session_state.match_number}_{st.session_state.tournament_name}"
-    csv_stats = pd.concat([h_df, a_df], ignore_index=True).to_csv(index=False).encode('utf_8_sig')
-    st.download_button("📊 統計CSV保存", csv_stats, f"{prefix}_stats.csv", "text/csv")
-    csv_log = st.session_state.history.to_csv(index=False).encode('utf_8_sig')
-    st.download_button("📜 ログCSV保存", csv_log, f"{prefix}_log.csv", "text/csv")
+    st.dataframe(df_history.iloc[::-1], use_container_width=True)
 
+# --- ★完全復元：シーズン成績タブ ---
 def draw_season_tab():
     st.header("📈 シーズン成績 ＆ 時系列推移")
     st.write("過去の試合ログ(CSV)を複数読み込んで、チームの累計スタッツや選手の成長を分析できます。")
@@ -1013,25 +1007,35 @@ def draw_season_tab():
 
 # --- メイン画面描画 ---
 if st.session_state.read_only:
-    tab_report, tab_season = st.tabs(["📄 ライブ統計レポート", "📈 シーズン成績"])
-    with tab_report:
-        if st.button("🔄 記録者の最新データを読み込む", use_container_width=True, type="primary"):
-            if os.path.exists(LOG_FILE):
-                try:
-                    df = pd.read_csv(LOG_FILE)
-                    df['点数'] = pd.to_numeric(df['点数'], errors='coerce').fillna(0).astype(int)
-                    st.session_state.history = df
-                except: pass
+    tab_live, tab_single, tab_season = st.tabs(["📄 ライブ速報", "📜 1試合レポート", "📈 シーズン成績"])
+    
+    with tab_live:
+        st.info("💡 記録者が入力中の試合をリアルタイムで確認できます。")
+        if st.button("🔄 最新データを読み込む", use_container_width=True, type="primary"):
+            if os.path.exists(LOG_FILE): 
+                st.session_state.history = parse_csv_bytes(open(LOG_FILE, "rb").read())
             if os.path.exists(SET_FILE):
-                try:
-                    with open(SET_FILE, "r", encoding="utf-8") as f: s = json.load(f)
-                    for k, v in s.items(): st.session_state[k] = v
-                except: pass
+                with open(SET_FILE, "r", encoding="utf-8") as f: 
+                    s = json.load(f)
+                    st.session_state.home_name = s.get('home_name', '松浪')
+                    st.session_state.away_name = s.get('away_name', 'AWAY')
             st.session_state.report_trigger = True
             st.rerun()
-        if st.session_state.history.empty: st.info("データがありません。「最新データを読み込む」ボタンを押してください。")
-        elif not st.session_state.report_trigger: st.info("上のボタンを押すと最新のグラフが表示されます。")
-        else: draw_report_body()
+        if st.session_state.history.empty: 
+            st.caption("データなし")
+        elif st.session_state.report_trigger: 
+            draw_report_body(st.session_state.history, st.session_state.home_name, st.session_state.away_name)
+    
+    with tab_single:
+        st.info("📂 過去のログCSVを1つ選んで、詳細な試合レポートを表示します。")
+        single_file = st.file_uploader("詳細ログCSVを選択してください", type=["csv"], key="single_viewer")
+        if single_file:
+            df_v = parse_csv_bytes(single_file.getvalue())
+            teams_v = [t for t in df_v['チーム'].unique() if t and str(t).upper() != 'UNKNOWN']
+            h_v = teams_v[0] if len(teams_v) > 0 else "HOME"
+            a_v = teams_v[1] if len(teams_v) > 1 else "AWAY"
+            draw_report_body(df_v, h_v, a_v)
+            
     with tab_season:
         draw_season_tab()
 
@@ -1041,7 +1045,8 @@ else:
         if not st.session_state.history.empty:
             try:
                 qs = st.session_state.history.groupby(['チーム', 'Q'])['点数'].sum().unstack(fill_value=0).reindex(index=[st.session_state.home_name, st.session_state.away_name], columns=["1Q", "2Q", "3Q", "4Q", "OT"], fill_value=0)
-                qs['Total'] = qs.sum(axis=1); st.table(qs.astype(int))
+                qs['Total'] = qs.sum(axis=1)
+                st.table(qs.astype(int))
             except: pass
         
         st.radio("Q", ["1Q", "2Q", "3Q", "4Q", "OT"], horizontal=True, label_visibility="collapsed", key="current_q", on_change=safe_rerun)
@@ -1079,7 +1084,11 @@ else:
                 if st.button("📊 最新のデータでレポートを計算・表示する", use_container_width=True, type="primary"):
                     st.session_state.report_trigger = True
                     st.rerun()
-            else: draw_report_body()
+            else: draw_report_body(st.session_state.history, st.session_state.home_name, st.session_state.away_name)
+            
+            prefix = f"{st.session_state.match_date}_{st.session_state.match_number}_{st.session_state.tournament_name}"
+            csv_log = st.session_state.history.to_csv(index=False).encode('utf_8_sig')
+            st.download_button("📜 ログCSV保存", csv_log, f"{prefix}_log.csv", "text/csv")
             
     with tab_season:
         draw_season_tab()
@@ -1089,6 +1098,7 @@ else:
         st.info("💡 記録の「Q（クォーター）」を変更すると、**その記録から現在までのすべてのデータ**が自動で上書き修正されます！")
         
         if not st.session_state.history.empty:
+            # ★完全復元：Qの一括変更機能とゴミ箱ボタン★
             for i, row in st.session_state.history.iloc[::-1].iterrows():
                 cols = st.columns([2, 5, 1])
                 
