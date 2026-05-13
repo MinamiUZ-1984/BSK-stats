@@ -11,7 +11,7 @@ import datetime
 import urllib.parse
 
 # ページ設定
-st.set_page_config(page_title="松浪ミニバス分析 V56.0", layout="centered")
+st.set_page_config(page_title="松浪ミニバス分析 V57.0", layout="centered")
 
 # ==========================================
 # ★ここに実際のアプリのURLを入力してください★
@@ -346,7 +346,6 @@ def draw_flat_zone(c_o, c_lbl, c_x, area_name, key_prefix, item_type):
             st.session_state.mode = "リバウンド選択"
             safe_rerun()
 
-# ★大改修：操作メニューをカテゴリー別に色分け＆グループ化★
 def draw_action_menu():
     player_num = st.session_state.tmp.get('player')
     team_name = st.session_state.tmp.get('team')
@@ -382,7 +381,6 @@ def draw_action_menu():
             with o[3]:
                 st.markdown("<div style='font-size:11px; font-weight:bold; color:#f39c12; text-align:center; margin-bottom:2px;'>⚠️ 反則</div>", unsafe_allow_html=True)
                 if st.button("F", use_container_width=True): record("Foul"); safe_rerun()
-                # ボタン高さを揃えるためのダミー空間
                 st.markdown("<div style='height:52px;'></div>", unsafe_allow_html=True)
                 
             st.markdown("<div style='margin-bottom:12px;'></div>", unsafe_allow_html=True)
@@ -400,22 +398,24 @@ def draw_action_menu():
             it = st.session_state.tmp.get('item', '2P')
             if it == "2P":
                 st.markdown("<div style='text-align:center;'><span class='court-zone'>【 2P エリア 】</span></div>", unsafe_allow_html=True)
+                
+                # ★大改修(V57.0)：レイアップ(レ)をリング(🗑️)の真横の最前列に、ゴール下(下)をその後方に配置入れ替え！★
                 r1 = st.columns([11,16,11, 4, 11,16,11, 10, 11,16,11, 4, 11,16,11])
                 draw_flat_zone(r1[0], r1[1], r1[2], "左角", "2p_lcor", "2P")
-                draw_flat_zone(r1[4], r1[5], r1[6], "左下", "2p_lbl", "2P")
+                draw_flat_zone(r1[4], r1[5], r1[6], "左レ", "2p_ll", "2P") # ゴール左横
                 with r1[7]:
                     st.markdown("<div style='text-align:center; font-size:24px; line-height:48px; margin:0px;'>🗑️</div>", unsafe_allow_html=True)
-                draw_flat_zone(r1[8], r1[9], r1[10], "右下", "2p_rbl", "2P")
+                draw_flat_zone(r1[8], r1[9], r1[10], "右レ", "2p_rl", "2P") # ゴール右横
                 draw_flat_zone(r1[12], r1[13], r1[14], "右角", "2p_rcor", "2P")
 
                 r2 = st.columns([16, 11,16,11, 12, 11,16,11, 12, 11,16,11, 16])
-                draw_flat_zone(r2[1], r2[2], r2[3], "左レ", "2p_ll", "2P")
-                draw_flat_zone(r2[5], r2[6], r2[7], "中下", "2p_cbl", "2P")
-                draw_flat_zone(r2[9], r2[10], r2[11], "右レ", "2p_rl", "2P")
+                draw_flat_zone(r2[1], r2[2], r2[3], "左下", "2p_lbl", "2P") # レイアップの後方
+                draw_flat_zone(r2[5], r2[6], r2[7], "中レ", "2p_cl", "2P")  # ゴール正面レイアップ
+                draw_flat_zone(r2[9], r2[10], r2[11], "右下", "2p_rbl", "2P") # レイアップの後方
 
                 r3 = st.columns([16, 11,16,11, 12, 11,16,11, 12, 11,16,11, 16])
                 draw_flat_zone(r3[1], r3[2], r3[3], "左45", "2p_l45", "2P")
-                draw_flat_zone(r3[5], r3[6], r3[7], "中レ", "2p_cl", "2P")
+                draw_flat_zone(r3[5], r3[6], r3[7], "中下", "2p_cbl", "2P") # ゴール下正面
                 draw_flat_zone(r3[9], r3[10], r3[11], "右45", "2p_r45", "2P")
 
                 r4 = st.columns([16, 11,16,11, 12, 11,16,11, 12, 11,16,11, 16])
