@@ -11,7 +11,7 @@ import datetime
 import urllib.parse
 
 # ページ設定
-st.set_page_config(page_title="松浪ミニバス分析 V60.0", layout="centered")
+st.set_page_config(page_title="松浪ミニバス分析 V61.0", layout="centered")
 
 # ==========================================
 # ★ここに実際のアプリのURLを入力してください★
@@ -58,7 +58,7 @@ if 'read_only' not in st.session_state:
 
 # --- 使用者名ログイン＆ロック画面 ---
 if 'room_key' not in st.session_state:
-    st.title("🏀 松浪ミニバス分析 V60.0")
+    st.title("🏀 松浪ミニバス分析 V61.0")
     st.info("💡 **使用者名** を入力してスタートしてください。")
     room_input = st.text_input("使用者名（例：〇〇父 など）")
     col1, col2 = st.columns(2)
@@ -215,7 +215,6 @@ if 'mode' not in st.session_state: st.session_state.mode = "選手選択"
 if 'tmp' not in st.session_state: st.session_state.tmp = {}
 if 'report_trigger' not in st.session_state: st.session_state.report_trigger = False
 
-# --- 汎用CSV読み込み関数 ---
 def parse_csv_bytes(file_bytes):
     try: 
         df = pd.read_csv(io.BytesIO(file_bytes), encoding='utf_8_sig')
@@ -264,7 +263,6 @@ def load_csv_data():
             else: st.error("対応していないCSV形式です。")
         except Exception as e: st.error(f"読み込みエラー: {e}")
 
-# --- サイドバー表示 ---
 with st.sidebar:
     st.success(f"👤 現在の使用者: **{ROOM}**")
     mode_str = "👀 見るだけモード" if st.session_state.read_only else "✍️ 記録中（編集可）"
@@ -606,47 +604,65 @@ def draw_report_body(df_history, home_name, away_name):
     
     st.divider()
     
-    # ★NEW：アシスト詳細履歴機能★
-    st.header("5. 詳細ログ ＆ アシスト履歴")
+    # ★大改修：アシスト・ホットラインのヒートマップ化★
+    st.header("5. 🤝 アシスト・ホットライン解析")
+    st.write("「誰が、誰にパスを出して得点に繋がったか」を視覚化します。色が濃いほど強力なコンビです！")
     
     ast_df = df_history[df_history['項目'] == 'AST']
     if not ast_df.empty:
         ast_records = []
         for idx, ast_row in ast_df.iterrows():
-            ast_p = ast_row['名前']
+            ast_p = str(ast_row['名前']).replace('番', '')
             ast_team = ast_row['チーム']
-            q = ast_row['Q']
             
-            # 詳細列（例: "to #4"）から得点者を抽出
             scorer_match = re.search(r'#(\d+)', str(ast_row['詳細']))
-            scorer_p = f"{scorer_match.group(1)}番" if scorer_match else "不明"
-            
-            shot_str = "不明"
-            # このアシストより前に記録された、同じチーム・同じ得点者の「成功したシュート」を逆引きで探す
-            past_shots = df_history.loc[:idx-1]
-            shots_by_scorer = past_shots[(past_shots['チーム'] == ast_team) & 
-                                         (past_shots['名前'] == scorer_p) & 
-                                         (past_shots['結果'] == '成功') & 
-                                         (past_shots['項目'].isin(['2P', '3P']))]
-            
-            if not shots_by_scorer.empty:
-                last_shot = shots_by_scorer.iloc[-1]
-                shot_str = f"{last_shot['項目']} ({last_shot['詳細']})"
+            scorer_p = scorer_match.group(1) if scorer_match else "不明"
             
             ast_records.append({
-                'Q': q,
                 'チーム': ast_team,
-                'パサー(AST)': ast_p,
-                'シューター': scorer_p,
-                '決めたシュート': shot_str
+                'パサー': f"#{ast_p}",
+                'シューター': f"#{scorer_p}"
             })
+            
+        ast_table = pd.DataFrame(ast_records)
         
-        if ast_records:
-            st.subheader("🤝 アシスト詳細一覧（ホットライン）")
-            ast_table = pd.DataFrame(ast_records)
-            st.dataframe(ast_table, hide_index=True, use_container_width=True)
-    
-    st.subheader("📜 全プレイ履歴 (生データ)")
+        hc1, hc2 = st.columns(2)
+        for i, t_name in enumerate([home_name, away_name]):
+            t_ast = ast_table[ast_table['チーム'] == t_name]
+            col = hc1 if i == 0 else hc2
+            
+            with col:
+                st.write(f"{'🔵' if i == 0 else '🔴'} **{t_name}**")
+                if not t_ast.empty:
+                    ast_counts = t_ast.groupby(['パサー', 'シューター']).size().reset_index(name='回数')
+                    
+                    base = alt.Chart(ast_counts).encode(
+                        x=alt.X('シューター:N', title='シューター (決めた人)', axis=alt.Axis(labelAngle=0)),
+                        y=alt.Y('パサー:N', title='パサー (パスを出した人)')
+                    )
+                    
+                    heatmap = base.mark_rect().encode(
+                        color=alt.Color('回数:Q', scale=alt.Scale(scheme='blues' if i == 0 else 'reds'), legend=None)
+                    )
+                    
+                    text = base.mark_text(baseline='middle').encode(
+                        text='回数:Q',
+                        color=alt.condition(
+                            alt.datum.回数 > ast_counts['回数'].max() / 2,
+                            alt.value('white'),
+                            alt.value('black')
+                        )
+                    )
+                    
+                    chart_h = (heatmap + text).properties(height=200)
+                    st.altair_chart(chart_h, use_container_width=True)
+                else:
+                    st.caption("アシスト記録なし")
+    else:
+        st.caption("アシスト記録がありません")
+        
+    st.divider()
+    st.header("6. 📜 全プレイ履歴 (生データ)")
     st.dataframe(df_history.iloc[::-1], use_container_width=True)
 
 def draw_season_tab():
