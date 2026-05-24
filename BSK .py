@@ -11,12 +11,12 @@ import datetime
 import urllib.parse
 
 # ページ設定
-st.set_page_config(page_title="松浪ミニバス分析 V59.0", layout="centered")
+st.set_page_config(page_title="松浪ミニバス分析 V60.0", layout="centered")
 
 # ==========================================
 # ★ここに実際のアプリのURLを入力してください★
 # ==========================================
-APP_URL = "https://bsk-stats.streamlit.app/" 
+APP_URL = "https://your-app-url.streamlit.app" 
 
 # --- 0. CSS注入 ---
 st.markdown("""
@@ -58,7 +58,7 @@ if 'read_only' not in st.session_state:
 
 # --- 使用者名ログイン＆ロック画面 ---
 if 'room_key' not in st.session_state:
-    st.title("🏀 松浪ミニバス　スタッツ分析🏀 ")
+    st.title("🏀 松浪ミニバス分析 V60.0")
     st.info("💡 **使用者名** を入力してスタートしてください。")
     room_input = st.text_input("使用者名（例：〇〇父 など）")
     col1, col2 = st.columns(2)
@@ -598,12 +598,55 @@ def draw_report_body(df_history, home_name, away_name):
     
     st.write(f"🔵 **{home_name}**"); st.table(get_full_stats(home_name, all_h).drop(columns='Team').set_index('#'))
     st.write(f"🔴 **{away_name}**"); st.table(get_full_stats(away_name, all_a).drop(columns='Team').set_index('#'))
+    
     st.divider()
     st.header("4. 💡 分析結果コメント（自動アドバイス）")
     advice_html = generate_coach_advice(filtered_history, home_name, away_name)
     st.markdown(advice_html, unsafe_allow_html=True)
+    
     st.divider()
-    st.header("5. 詳細ログ")
+    
+    # ★NEW：アシスト詳細履歴機能★
+    st.header("5. 詳細ログ ＆ アシスト履歴")
+    
+    ast_df = df_history[df_history['項目'] == 'AST']
+    if not ast_df.empty:
+        ast_records = []
+        for idx, ast_row in ast_df.iterrows():
+            ast_p = ast_row['名前']
+            ast_team = ast_row['チーム']
+            q = ast_row['Q']
+            
+            # 詳細列（例: "to #4"）から得点者を抽出
+            scorer_match = re.search(r'#(\d+)', str(ast_row['詳細']))
+            scorer_p = f"{scorer_match.group(1)}番" if scorer_match else "不明"
+            
+            shot_str = "不明"
+            # このアシストより前に記録された、同じチーム・同じ得点者の「成功したシュート」を逆引きで探す
+            past_shots = df_history.loc[:idx-1]
+            shots_by_scorer = past_shots[(past_shots['チーム'] == ast_team) & 
+                                         (past_shots['名前'] == scorer_p) & 
+                                         (past_shots['結果'] == '成功') & 
+                                         (past_shots['項目'].isin(['2P', '3P']))]
+            
+            if not shots_by_scorer.empty:
+                last_shot = shots_by_scorer.iloc[-1]
+                shot_str = f"{last_shot['項目']} ({last_shot['詳細']})"
+            
+            ast_records.append({
+                'Q': q,
+                'チーム': ast_team,
+                'パサー(AST)': ast_p,
+                'シューター': scorer_p,
+                '決めたシュート': shot_str
+            })
+        
+        if ast_records:
+            st.subheader("🤝 アシスト詳細一覧（ホットライン）")
+            ast_table = pd.DataFrame(ast_records)
+            st.dataframe(ast_table, hide_index=True, use_container_width=True)
+    
+    st.subheader("📜 全プレイ履歴 (生データ)")
     st.dataframe(df_history.iloc[::-1], use_container_width=True)
 
 def draw_season_tab():
@@ -988,7 +1031,6 @@ def draw_action_menu():
 
 # --- メイン画面描画 ---
 if st.session_state.read_only:
-    # ライブ速報を廃止し、2つの分析タブのみに整理
     tab_single, tab_season = st.tabs(["📜 1試合レポート", "📈 シーズン成績"])
     
     with tab_single:
