@@ -13,7 +13,7 @@ import urllib.parse
 # ==========================================
 # ページ設定
 # ==========================================
-st.set_page_config(page_title="松浪ミニバス分析 V63.2", layout="centered")
+st.set_page_config(page_title="松浪ミニバス分析 V63.3", layout="centered")
 
 # ★ここに実際のアプリのURLを入力してください★
 APP_URL = "https://your-app-url.streamlit.app" 
@@ -61,7 +61,7 @@ if 'read_only' not in st.session_state:
     st.session_state.read_only = False
 
 if 'room_key' not in st.session_state:
-    st.title("🏀 松浪ミニバス分析 V63.2")
+    st.title("🏀 松浪ミニバス分析 V63.3")
     st.info("💡 **使用者名** を入力してスタートしてください。")
     room_input = st.text_input("使用者名（例：〇〇父 など）")
     
@@ -871,7 +871,7 @@ def draw_report_body(df_history, home_name, away_name):
     
     st.divider()
 
-    # 4. アシスト・ホットライン解析 (総当たり星取表・全表示対応)
+    # 4. アシスト・ホットライン解析 (総当たり星取表・枠線つき全表示対応)
     st.header("4. 🤝 アシスト・ホットライン解析")
     st.write("「誰が、誰にパスを出してどんな得点に繋がったか」を視覚化します。色が濃いほど強力なコンビです！")
     
@@ -915,19 +915,18 @@ def draw_report_body(df_history, home_name, away_name):
             with col:
                 st.write(f"{'🔵' if i == 0 else '🔴'} **{t_name}**")
                 
-                # チームの全選手を#付きでリスト化
                 team_players = [f"#{p}" for p in (all_h if t_name == home_name else all_a)]
                 
                 if not t_ast.empty:
                     ast_counts = t_ast.groupby(['パサー', 'シューター']).size().reset_index(name='回数')
                     
-                    # scale(domain)で全選手を強制表示し、axisでlabelOverlap=Falseを指定して間引きを防ぐ
                     base = alt.Chart(ast_counts).encode(
                         x=alt.X('シューター:N', title='シューター (決めた人)', scale=alt.Scale(domain=team_players), axis=alt.Axis(labelAngle=0, labelOverlap=False)),
                         y=alt.Y('パサー:N', title='パサー (パスを出した人)', scale=alt.Scale(domain=team_players), axis=alt.Axis(labelOverlap=False))
                     )
                     
-                    heatmap = base.mark_rect().encode(
+                    # 枠線（stroke='lightgray', strokeWidth=1）を追加してマス目をハッキリさせる
+                    heatmap = base.mark_rect(stroke='lightgray', strokeWidth=1).encode(
                         color=alt.Color('回数:Q', scale=alt.Scale(scheme='blues' if i == 0 else 'reds'), legend=None)
                     )
                     
@@ -940,7 +939,6 @@ def draw_report_body(df_history, home_name, away_name):
                         )
                     )
                     
-                    # 高さを300にして正方行列に近づける
                     st.altair_chart((heatmap + text).properties(height=300), use_container_width=True)
                 else:
                     st.caption("アシスト記録なし")
@@ -1269,7 +1267,7 @@ def draw_season_tab():
                 
                 st.divider()
                 
-                # --- ③ シーズン累計：アシスト・ホットライン解析 (総当たり全表示対応) ---
+                # --- ③ シーズン累計：アシスト・ホットライン解析 (枠線つき・総当たり全表示対応) ---
                 st.subheader("③ 🤝 アシスト・ホットライン解析 (シーズン累計)")
                 st.write(f"「誰が、誰にパスを出して得点に繋がったか」のシーズン累計です。色が濃いほど強力なコンビです！")
                 
@@ -1297,7 +1295,8 @@ def draw_season_tab():
                         y=alt.Y('パサー:N', title='パサー (パスを出した人)', scale=alt.Scale(domain=team_players_season), axis=alt.Axis(labelOverlap=False))
                     )
                     
-                    heatmap_s = base_s.mark_rect().encode(
+                    # 枠線（stroke='lightgray', strokeWidth=1）を追加
+                    heatmap_s = base_s.mark_rect(stroke='lightgray', strokeWidth=1).encode(
                         color=alt.Color('回数:Q', scale=alt.Scale(scheme='blues'), legend=None)
                     )
                     
