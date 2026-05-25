@@ -13,7 +13,7 @@ import urllib.parse
 # ==========================================
 # ページ設定
 # ==========================================
-st.set_page_config(page_title="松浪ミニバス分析 V62.2", layout="centered")
+st.set_page_config(page_title="松浪ミニバス分析 V62.3", layout="centered")
 
 # ★ここに実際のアプリのURLを入力してください★
 APP_URL = "https://your-app-url.streamlit.app" 
@@ -61,7 +61,7 @@ if 'read_only' not in st.session_state:
     st.session_state.read_only = False
 
 if 'room_key' not in st.session_state:
-    st.title("🏀 松浪ミニバス分析 V62.2")
+    st.title("🏀 松浪ミニバス分析 V62.3")
     st.info("💡 **使用者名** を入力してスタートしてください。")
     room_input = st.text_input("使用者名（例：〇〇父 など）")
     
@@ -871,7 +871,7 @@ def draw_report_body(df_history, home_name, away_name):
     
     st.divider()
 
-    # 4. アシスト・ホットライン解析 (NEW: 表と色分け追加)
+    # 4. アシスト・ホットライン解析 (NEW: 表の統合と色分け)
     st.header("4. 🤝 アシスト・ホットライン解析")
     st.write("「誰が、誰にパスを出してどんな得点に繋がったか」を視覚化します。色が濃いほど強力なコンビです！")
     
@@ -907,8 +907,9 @@ def draw_report_body(df_history, home_name, away_name):
             })
             
         ast_table = pd.DataFrame(ast_records)
-        hc1, hc2 = st.columns(2)
         
+        # --- ① ヒートマップの描画（左右2列） ---
+        hc1, hc2 = st.columns(2)
         for i, t_name in enumerate([home_name, away_name]):
             t_ast = ast_table[ast_table['チーム'] == t_name]
             col = hc1 if i == 0 else hc2
@@ -916,7 +917,6 @@ def draw_report_body(df_history, home_name, away_name):
             with col:
                 st.write(f"{'🔵' if i == 0 else '🔴'} **{t_name}**")
                 if not t_ast.empty:
-                    # ① ヒートマップの描画
                     ast_counts = t_ast.groupby(['パサー', 'シューター']).size().reset_index(name='回数')
                     
                     base = alt.Chart(ast_counts).encode(
@@ -938,22 +938,23 @@ def draw_report_body(df_history, home_name, away_name):
                     )
                     
                     st.altair_chart((heatmap + text).properties(height=200), use_container_width=True)
-                    
-                    # ② 詳細リスト（表）の描画と色分け
-                    st.markdown(f"**📝 アシスト詳細リスト**")
-                    disp_df = t_ast[['Q', 'パサー', 'シューター', 'シュート種類']].copy()
-                    
-                    # Pandas Stylerを使ってチームカラーで背景色を設定
-                    bg_color = '#e6f2ff' if i == 0 else '#ffe6e6' # 薄い青 または 薄い赤
-                    
-                    def color_bg(row):
-                        return [f'background-color: {bg_color}'] * len(row)
-                        
-                    styled_df = disp_df.style.apply(color_bg, axis=1)
-                    st.dataframe(styled_df, hide_index=True, use_container_width=True)
-                    
                 else:
                     st.caption("アシスト記録なし")
+                    
+        # --- ② 詳細リスト（表）の統合と色分け ---
+        st.markdown(f"**📝 アシスト詳細リスト**")
+        disp_df = ast_table[['チーム', 'Q', 'パサー', 'シューター', 'シュート種類']].copy()
+        
+        def color_bg(row):
+            if row['チーム'] == home_name:
+                return [f'background-color: #e6f2ff'] * len(row) # 薄い青
+            elif row['チーム'] == away_name:
+                return [f'background-color: #ffe6e6'] * len(row) # 薄い赤
+            return [''] * len(row)
+            
+        styled_df = disp_df.style.apply(color_bg, axis=1)
+        st.dataframe(styled_df, hide_index=True, use_container_width=True)
+                    
     else:
         st.caption("アシスト記録がありません")
         
