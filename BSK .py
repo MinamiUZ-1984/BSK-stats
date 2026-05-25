@@ -13,7 +13,7 @@ import urllib.parse
 # ==========================================
 # ページ設定
 # ==========================================
-st.set_page_config(page_title="松浪ミニバス分析 V62.3", layout="centered")
+st.set_page_config(page_title="松浪ミニバス分析 V63.0", layout="centered")
 
 # ★ここに実際のアプリのURLを入力してください★
 APP_URL = "https://your-app-url.streamlit.app" 
@@ -61,7 +61,7 @@ if 'read_only' not in st.session_state:
     st.session_state.read_only = False
 
 if 'room_key' not in st.session_state:
-    st.title("🏀 松浪ミニバス分析 V62.3")
+    st.title("🏀 松浪ミニバス分析 V63.0")
     st.info("💡 **使用者名** を入力してスタートしてください。")
     room_input = st.text_input("使用者名（例：〇〇父 など）")
     
@@ -871,7 +871,7 @@ def draw_report_body(df_history, home_name, away_name):
     
     st.divider()
 
-    # 4. アシスト・ホットライン解析 (NEW: 表の統合と色分け)
+    # 4. アシスト・ホットライン解析 (NEW: 一つの表に統合・色分け)
     st.header("4. 🤝 アシスト・ホットライン解析")
     st.write("「誰が、誰にパスを出してどんな得点に繋がったか」を視覚化します。色が濃いほど強力なコンビです！")
     
@@ -886,7 +886,6 @@ def draw_report_body(df_history, home_name, away_name):
             scorer_match = re.search(r'#(\d+)', str(ast_row['詳細']))
             scorer_p = scorer_match.group(1) if scorer_match else "不明"
             
-            # シュート種類の逆引き検索
             shot_str = "不明"
             past_shots = df_history.loc[:idx-1]
             shots_by_scorer = past_shots[(past_shots['チーム'] == ast_team) & 
@@ -908,7 +907,7 @@ def draw_report_body(df_history, home_name, away_name):
             
         ast_table = pd.DataFrame(ast_records)
         
-        # --- ① ヒートマップの描画（左右2列） ---
+        # ① ヒートマップの描画（左右2列）
         hc1, hc2 = st.columns(2)
         for i, t_name in enumerate([home_name, away_name]):
             t_ast = ast_table[ast_table['チーム'] == t_name]
@@ -941,15 +940,15 @@ def draw_report_body(df_history, home_name, away_name):
                 else:
                     st.caption("アシスト記録なし")
                     
-        # --- ② 詳細リスト（表）の統合と色分け ---
+        # ② チームカラーで色分けした1つの詳細リスト（表）を描画
         st.markdown(f"**📝 アシスト詳細リスト**")
         disp_df = ast_table[['チーム', 'Q', 'パサー', 'シューター', 'シュート種類']].copy()
         
         def color_bg(row):
             if row['チーム'] == home_name:
-                return [f'background-color: #e6f2ff'] * len(row) # 薄い青
+                return [f'background-color: #e6f2ff'] * len(row)
             elif row['チーム'] == away_name:
-                return [f'background-color: #ffe6e6'] * len(row) # 薄い赤
+                return [f'background-color: #ffe6e6'] * len(row)
             return [''] * len(row)
             
         styled_df = disp_df.style.apply(color_bg, axis=1)
@@ -1092,6 +1091,203 @@ def draw_season_tab():
                 })
                 
                 st.dataframe(pd.DataFrame(rows).set_index('#'), use_container_width=True)
+                
+                st.divider()
+                
+                st.subheader("② 個人スタッツ ＆ 分析グラフ")
+                target_scope = st.selectbox("分析対象（チーム全体・個人）を選択してください", ["チーム全体"] + s_players)
+                
+                if target_scope == "チーム全体":
+                    target_df = h_season_df
+                else:
+                    target_df = h_season_df[h_season_df['名前'] == f"{target_scope}番"]
+                    
+                st.markdown(f"##### 📅 時系列スタッツ表 ({target_scope})")
+                ts_rows = []
+                def fmt_stat_inline(m, a):
+                    return f"{m}/{a} ({(m/a*100):.0f}%)" if a > 0 else "-"
+                    
+                def get_2p_stat(pdf_match, areas):
+                    target = pdf_match[(pdf_match['項目']=='2P') & (pdf_match['詳細'].isin(areas))]
+                    m = len(target[target['結果']=='成功'])
+                    a = len(target)
+                    return fmt_stat_inline(m, a)
+                
+                for match_id in match_order:
+                    pdf = target_df[target_df['Match_ID'] == match_id]
+                    if pdf.empty and target_scope != "チーム全体":
+                        continue
+                    
+                    m2i = len(pdf[(pdf['項目']=='2P') & (pdf['結果']=='成功')])
+                    m2a = len(pdf[pdf['項目']=='2P'])
+                    
+                    m3i = len(pdf[(pdf['項目']=='3P') & (pdf['結果']=='成功')])
+                    m3a = len(pdf[pdf['項目']=='3P'])
+                    
+                    fi = len(pdf[(pdf['項目']=='FT') & (pdf['結果']=='成功')])
+                    fa = len(pdf[pdf['項目']=='FT'])
+                    
+                    orb = len(pdf[pdf['項目']=='OR'])
+                    drb = len(pdf[pdf['項目']=='DR'])
+                    
+                    ast = len(pdf[pdf['項目']=='AST'])
+                    stl = len(pdf[pdf['項目']=='STL'])
+                    f = len(pdf[pdf['項目']=='Foul'])
+                    blk = len(pdf[pdf['項目']=='BLK'])
+                    deflection = len(pdf[pdf['項目']=='DEF'])
+                    
+                    pts = pdf['点数'].sum()
+                    
+                    to = pdf[pdf['項目']=='TO']
+                    tv = len(to[to['詳細']=='TV'])
+                    dd = len(to[to['詳細']=='DD'])
+                    pm = len(to[to['詳細']=='PM'])
+                    s24 = len(to[to['詳細']=='24S'])
+                    
+                    in_paint = pdf[(pdf['項目']=='2P') & (pdf['詳細'].isin(['左下', '中下', '右下', '中', '中ミ']))]
+                    in_paint_i = len(in_paint[in_paint['結果']=='成功'])
+                    in_paint_a = len(in_paint)
+                    
+                    layup = pdf[(pdf['項目']=='2P') & (pdf['詳細'].isin(['左レ', '右レ']))]
+                    layup_i = len(layup[layup['結果']=='成功'])
+                    layup_a = len(layup)
+                    
+                    match_full_df = all_df[all_df['Match_ID'] == match_id]
+                    if target_scope != "チーム全体":
+                        pm_match = calculate_pm(target_scope, target_team, match_full_df)
+                    else:
+                        pm_match = match_full_df[match_full_df['チーム'] == target_team]['点数'].sum() - match_full_df[match_full_df['チーム'] != target_team]['点数'].sum()
+                    
+                    ts_rows.append({
+                        '試合名': match_id,
+                        '勝敗': match_info[match_id]['勝敗'],
+                        'スコア': match_info[match_id]['スコア'],
+                        'Pts': pts, 
+                        '+/-': pm_match,
+                        'FG': fmt_stat_inline(m2i+m3i, m2a+m3a), 
+                        '3P': fmt_stat_inline(m3i, m3a), 
+                        'FT': fmt_stat_inline(fi, fa),
+                        'OR': orb, 
+                        'DR': drb, 
+                        'As': ast, 
+                        'St': stl, 
+                        'Blk': blk, 
+                        'Def': deflection, 
+                        'F': f,
+                        'TV': tv, 
+                        'DD': dd, 
+                        'PM(ﾊﾟｽﾐｽ)': pm, 
+                        '24S': s24,
+                        'G下(ｲﾝｻｲﾄﾞ)': fmt_stat_inline(in_paint_i, in_paint_a),
+                        'ﾚｲｱｯﾌﾟ': fmt_stat_inline(layup_i, layup_a),
+                        '左角(ﾐﾄﾞﾙ)': get_2p_stat(pdf, ['左角']), 
+                        '左45(ﾐﾄﾞﾙ)': get_2p_stat(pdf, ['左45']),
+                        '中ミ(ﾐﾄﾞﾙ)': get_2p_stat(pdf, ['中ミ']), 
+                        '右45(ﾐﾄﾞﾙ)': get_2p_stat(pdf, ['右45']), 
+                        '右角(ﾐﾄﾞﾙ)': get_2p_stat(pdf, ['右角'])
+                    })
+                    
+                ts_df = pd.DataFrame(ts_rows)
+                st.dataframe(ts_df.set_index('試合名'), use_container_width=True)
+                
+                st.markdown(f"##### 📊 累積スタッツ 棒グラフ ({target_scope})")
+                bc1, bc2 = st.columns(2)
+                with bc1:
+                    s_stats = get_shot_stats(target_df)
+                    max_y_overall = int(s_stats.sum(axis=1).max() * 1.15) + 1 if s_stats.sum().sum() > 0 else 5
+                    st.write("① シュート(2P/3P/FT)")
+                    if s_stats.sum().sum() > 0:
+                        draw_stacked_chart(s_stats, '項目', max_y_overall)
+                    else:
+                        st.caption("データなし")
+                    
+                    r_stats = get_reb_stats(target_df)
+                    max_y_reb = int(r_stats.max() * 1.15) + 1 if r_stats.sum() > 0 else 5
+                    st.write("③ リバウンド")
+                    if r_stats.sum() > 0:
+                        draw_simple_bar_chart(r_stats, '種類', max_y_reb, ['OR', 'DR', 'Total'], ['#ff9f43', '#3498db', '#2ecc71'])
+                    else:
+                        st.caption("データなし")
+                    
+                with bc2:
+                    a_stats_2p = get_area_stats(target_df, "2P", ["左下", "中下", "右下", "左レ", "中レ", "右レ", "左角", "左45", "中", "中ミ", "右45", "右角"])
+                    max_y_2p = int(a_stats_2p.sum(axis=1).max() * 1.15) + 1 if a_stats_2p.sum().sum() > 0 else 5
+                    st.write("② 2P エリア別")
+                    if a_stats_2p.sum().sum() > 0:
+                        draw_stacked_chart(a_stats_2p, '詳細', max_y_2p)
+                    else:
+                        st.caption("データなし")
+                    
+                    to_stats = get_to_stats(target_df)
+                    max_y_to = int(to_stats.max() * 1.15) + 1 if to_stats.sum() > 0 else 5
+                    st.write("④ ターンオーバー")
+                    if to_stats.sum() > 0:
+                        draw_simple_bar_chart(to_stats, '詳細', max_y_to, ['TV', 'DD', 'PM', '24S', 'Total'], ['#95a5a6', '#95a5a6', '#95a5a6', '#95a5a6', '#e74c3c'])
+                    else:
+                        st.caption("データなし")
+
+                st.markdown(f"##### 📉 時系列 折れ線グラフ ({target_scope})")
+                numeric_cols = ['Pts', '+/-', 'OR', 'DR', 'As', 'St', 'Blk', 'Def', 'F', 'PM(ﾊﾟｽﾐｽ)', 'TV', 'DD', '24S']
+                selected_stat = st.selectbox("グラフ化する項目を選択してください", numeric_cols, index=0)
+                
+                line_chart = alt.Chart(ts_df).mark_line(point=True, color='#e74c3c', strokeWidth=3).encode(
+                    x=alt.X('試合名:N', sort=match_order, title='', axis=alt.Axis(labelAngle=-45)),
+                    y=alt.Y(f'{selected_stat}:Q', title=selected_stat),
+                    tooltip=['試合名', '勝敗', 'スコア', selected_stat]
+                ).properties(height=300)
+                
+                text = line_chart.mark_text(align='center', baseline='bottom', dy=-10, fontSize=14, fontWeight='bold').encode(
+                    text=f'{selected_stat}:Q'
+                )
+                
+                st.altair_chart(line_chart + text, use_container_width=True)
+                
+                st.divider()
+                
+                # --- ③ シーズン累計：アシスト・ホットライン解析 ---
+                st.subheader("③ 🤝 アシスト・ホットライン解析 (シーズン累計)")
+                st.write(f"「誰が、誰にパスを出して得点に繋がったか」のシーズン累計です。色が濃いほど強力なコンビです！")
+                
+                ast_df_season = all_df[(all_df['項目'] == 'AST') & (all_df['チーム'] == target_team)]
+                if not ast_df_season.empty:
+                    ast_records_season = []
+                    for idx, ast_row in ast_df_season.iterrows():
+                        ast_p = str(ast_row['名前']).replace('番', '')
+                        
+                        scorer_match = re.search(r'#(\d+)', str(ast_row['詳細']))
+                        scorer_p = scorer_match.group(1) if scorer_match else "不明"
+                        
+                        ast_records_season.append({
+                            'パサー': f"#{ast_p}", 
+                            'シューター': f"#{scorer_p}"
+                        })
+                        
+                    ast_table_season = pd.DataFrame(ast_records_season)
+                    ast_counts_season = ast_table_season.groupby(['パサー', 'シューター']).size().reset_index(name='回数')
+                    
+                    base_s = alt.Chart(ast_counts_season).encode(
+                        x=alt.X('シューター:N', title='シューター (決めた人)', axis=alt.Axis(labelAngle=0)),
+                        y=alt.Y('パサー:N', title='パサー (パスを出した人)')
+                    )
+                    
+                    heatmap_s = base_s.mark_rect().encode(
+                        color=alt.Color('回数:Q', scale=alt.Scale(scheme='blues'), legend=None)
+                    )
+                    
+                    text_s = base_s.mark_text(baseline='middle').encode(
+                        text='回数:Q',
+                        color=alt.condition(
+                            alt.datum.回数 > ast_counts_season['回数'].max() / 2, 
+                            alt.value('white'), 
+                            alt.value('black')
+                        )
+                    )
+                    
+                    st.altair_chart((heatmap_s + text_s).properties(height=250), use_container_width=True)
+                else:
+                    st.caption("アシスト記録がありません")
+            else:
+                st.warning(f"アップロードされたファイルに「{target_team}」のデータが見つかりません。上の入力欄の名前を確認してください。")
 
 # ==========================================
 # 記録入力操作メニュー
