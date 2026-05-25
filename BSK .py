@@ -10,15 +10,17 @@ import streamlit.components.v1 as components
 import datetime
 import urllib.parse
 
+# ==========================================
 # ページ設定
-st.set_page_config(page_title="松浪ミニバス分析 V61.0", layout="centered")
+# ==========================================
+st.set_page_config(page_title="松浪ミニバス分析 V62.1", layout="centered")
 
-# ==========================================
 # ★ここに実際のアプリのURLを入力してください★
-# ==========================================
 APP_URL = "https://your-app-url.streamlit.app" 
 
-# --- 0. CSS注入 ---
+# ==========================================
+# CSS注入（デザイン設定）
+# ==========================================
 st.markdown("""
     <style>
     .block-container { max-width: 450px !important; padding-left: 4px !important; padding-right: 4px !important; }
@@ -50,43 +52,53 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- ユーザーIDの発行 ---
+# ==========================================
+# ユーザーIDとログイン管理
+# ==========================================
 if 'user_id' not in st.session_state:
     st.session_state.user_id = str(uuid.uuid4())
 if 'read_only' not in st.session_state:
     st.session_state.read_only = False
 
-# --- 使用者名ログイン＆ロック画面 ---
 if 'room_key' not in st.session_state:
-    st.title("🏀 松浪ミニバス分析 V61.0")
+    st.title("🏀 松浪ミニバス分析 V62.1")
     st.info("💡 **使用者名** を入力してスタートしてください。")
     room_input = st.text_input("使用者名（例：〇〇父 など）")
+    
     col1, col2 = st.columns(2)
+    
     if col1.button("🚪 記録者として入る", type="primary", use_container_width=True):
-        if room_input.strip() == "": st.error("使用者名を入力してください！")
+        if room_input.strip() == "":
+            st.error("使用者名を入力してください！")
         else:
             room = room_input.strip()
             lock_file = f"lock_{room}.txt"
             if os.path.exists(lock_file):
-                with open(lock_file, "r") as f: locked_by = f.read()
+                with open(lock_file, "r") as f:
+                    locked_by = f.read()
                 if locked_by != st.session_state.user_id:
                     st.session_state.show_lock_warning = room
                     st.rerun()
-            with open(lock_file, "w") as f: f.write(st.session_state.user_id)
+            with open(lock_file, "w") as f:
+                f.write(st.session_state.user_id)
             st.session_state.room_key = room
             st.session_state.read_only = False
             st.rerun()
+            
     if col2.button("👀 見るだけモード", use_container_width=True):
-         if room_input.strip() == "": st.error("使用者名を入力してください！")
+         if room_input.strip() == "":
+             st.error("使用者名を入力してください！")
          else:
             st.session_state.room_key = room_input.strip()
             st.session_state.read_only = True
             st.rerun()
+            
     if st.session_state.get('show_lock_warning'):
         warn_room = st.session_state.show_lock_warning
         st.warning(f"⚠️ 使用者名「{warn_room}」は現在他の人が記録中です！")
         if st.button("🚨 強制的に記録者として奪う"):
-            with open(f"lock_{warn_room}.txt", "w") as f: f.write(st.session_state.user_id)
+            with open(f"lock_{warn_room}.txt", "w") as f:
+                f.write(st.session_state.user_id)
             st.session_state.room_key = warn_room
             st.session_state.read_only = False
             del st.session_state['show_lock_warning']
@@ -100,13 +112,16 @@ if 'room_key' not in st.session_state:
         
     st.stop() 
 
-# --- 設定・ログファイル名 ---
+# ==========================================
+# ファイル名・状態保存・リセット設定
+# ==========================================
 ROOM = st.session_state.room_key
 LOG_FILE = f"auto_save_log_{ROOM}.csv"
 SET_FILE = f"auto_save_settings_{ROOM}.json"
 
 def save_state():
-    if st.session_state.read_only: return 
+    if st.session_state.read_only:
+        return 
     if 'history' in st.session_state:
         st.session_state.history.to_csv(LOG_FILE, index=False, encoding='utf_8_sig')
     settings = {
@@ -131,16 +146,21 @@ def safe_rerun():
 def safe_sort_key(x):
     m = re.search(r'\d+', str(x))
     if m:
-        try: return (0, int(m.group()), str(x))
-        except: return (1, 0, str(x))
+        try:
+            return (0, int(m.group()), str(x))
+        except:
+            return (1, 0, str(x))
     return (1, 0, str(x))
 
 def reset_all_data():
-    if os.path.exists(LOG_FILE): os.remove(LOG_FILE)
-    if os.path.exists(SET_FILE): os.remove(SET_FILE)
+    if os.path.exists(LOG_FILE):
+        os.remove(LOG_FILE)
+    if os.path.exists(SET_FILE):
+        os.remove(SET_FILE)
     keys_to_clear = ['history', 'match_date', 'match_number', 'tournament_name', 'home_name', 'away_name', 'r_str_h', 'r_str_a', 'act_h', 'act_a', 'current_q', 'mode', 'tmp', 'report_trigger']
     for k in keys_to_clear:
-        if k in st.session_state: del st.session_state[k]
+        if k in st.session_state:
+            del st.session_state[k]
 
 def swap_teams():
     st.session_state.home_name, st.session_state.away_name = st.session_state.away_name, st.session_state.home_name
@@ -154,8 +174,10 @@ def add_h_player():
         all_h_list = [x.strip() for x in st.session_state.r_str_h.split(",") if x.strip()]
         curr_act_h = st.session_state.act_h
         for n in new_nums:
-            if n not in all_h_list: all_h_list.append(n)
-            if n not in curr_act_h: curr_act_h.append(n)
+            if n not in all_h_list:
+                all_h_list.append(n)
+            if n not in curr_act_h:
+                curr_act_h.append(n)
         st.session_state.r_str_h = ",".join(sorted(all_h_list, key=safe_sort_key))
         st.session_state.act_h = curr_act_h
         st.session_state.new_h_input = ""
@@ -167,8 +189,10 @@ def add_a_player():
         all_a_list = [x.strip() for x in st.session_state.r_str_a.split(",") if x.strip()]
         curr_act_a = st.session_state.act_a
         for n in new_nums:
-            if n not in all_a_list: all_a_list.append(n)
-            if n not in curr_act_a: curr_act_a.append(n)
+            if n not in all_a_list:
+                all_a_list.append(n)
+            if n not in curr_act_a:
+                curr_act_a.append(n)
         st.session_state.r_str_a = ",".join(sorted(all_a_list, key=safe_sort_key))
         st.session_state.act_a = curr_act_a
         st.session_state.new_a_input = ""
@@ -177,11 +201,16 @@ def logout_room():
     if not st.session_state.read_only:
         lock_file = f"lock_{st.session_state.room_key}.txt"
         if os.path.exists(lock_file):
-            with open(lock_file, "r") as f: locked_by = f.read()
-            if locked_by == st.session_state.user_id: os.remove(lock_file)
+            with open(lock_file, "r") as f:
+                locked_by = f.read()
+            if locked_by == st.session_state.user_id:
+                os.remove(lock_file)
     del st.session_state['room_key']
     st.session_state.read_only = False
 
+# ==========================================
+# セッションの初期化
+# ==========================================
 if 'app_init' not in st.session_state:
     st.session_state.app_init = True
     if os.path.exists(LOG_FILE):
@@ -191,38 +220,60 @@ if 'app_init' not in st.session_state:
             df['名前'] = df['名前'].astype(str).str.strip()
             df['点数'] = pd.to_numeric(df['点数'], errors='coerce').fillna(0).astype(int)
             st.session_state.history = df
-        except: pass
+        except:
+            pass
     if os.path.exists(SET_FILE):
         try:
-            with open(SET_FILE, "r", encoding="utf-8") as f: s = json.load(f)
-            for k, v in s.items(): st.session_state[k] = v
-        except: pass
+            with open(SET_FILE, "r", encoding="utf-8") as f:
+                s = json.load(f)
+            for k, v in s.items():
+                st.session_state[k] = v
+        except:
+            pass
 
 if 'history' not in st.session_state: 
     st.session_state.history = pd.DataFrame(columns=['id', 'Q', 'チーム', '名前', '項目', '詳細', '結果', '点数', 'オンコートH', 'オンコートA'])
 
-if 'match_date' not in st.session_state: st.session_state.match_date = datetime.date.today().strftime("%Y%m%d")
-if 'match_number' not in st.session_state: st.session_state.match_number = "01"
-if 'tournament_name' not in st.session_state: st.session_state.tournament_name = "練習試合"
-if 'home_name' not in st.session_state: st.session_state.home_name = "松浪"
-if 'away_name' not in st.session_state: st.session_state.away_name = "AWAY"
-if 'r_str_h' not in st.session_state: st.session_state.r_str_h = "4,5,6,7,8,9,10,11,12,13,14,15"
-if 'act_h' not in st.session_state: st.session_state.act_h = ["4","5","6","7","8"]
-if 'r_str_a' not in st.session_state: st.session_state.r_str_a = "4,5,6,7,8,9,10,11,12,13,14,15"
-if 'act_a' not in st.session_state: st.session_state.act_a = ["4","5","6","7","8"]
-if 'current_q' not in st.session_state: st.session_state.current_q = "1Q"
-if 'mode' not in st.session_state: st.session_state.mode = "選手選択"
-if 'tmp' not in st.session_state: st.session_state.tmp = {}
-if 'report_trigger' not in st.session_state: st.session_state.report_trigger = False
+if 'match_date' not in st.session_state:
+    st.session_state.match_date = datetime.date.today().strftime("%Y%m%d")
+if 'match_number' not in st.session_state:
+    st.session_state.match_number = "01"
+if 'tournament_name' not in st.session_state:
+    st.session_state.tournament_name = "練習試合"
+if 'home_name' not in st.session_state:
+    st.session_state.home_name = "松浪"
+if 'away_name' not in st.session_state:
+    st.session_state.away_name = "AWAY"
+if 'r_str_h' not in st.session_state:
+    st.session_state.r_str_h = "4,5,6,7,8,9,10,11,12,13,14,15"
+if 'act_h' not in st.session_state:
+    st.session_state.act_h = ["4","5","6","7","8"]
+if 'r_str_a' not in st.session_state:
+    st.session_state.r_str_a = "4,5,6,7,8,9,10,11,12,13,14,15"
+if 'act_a' not in st.session_state:
+    st.session_state.act_a = ["4","5","6","7","8"]
+if 'current_q' not in st.session_state:
+    st.session_state.current_q = "1Q"
+if 'mode' not in st.session_state:
+    st.session_state.mode = "選手選択"
+if 'tmp' not in st.session_state:
+    st.session_state.tmp = {}
+if 'report_trigger' not in st.session_state:
+    st.session_state.report_trigger = False
 
 def parse_csv_bytes(file_bytes):
     try: 
         df = pd.read_csv(io.BytesIO(file_bytes), encoding='utf_8_sig')
     except UnicodeDecodeError: 
         df = pd.read_csv(io.BytesIO(file_bytes), encoding='cp932')
+    
     df.columns = [str(c).replace('\ufeff', '').strip() for c in df.columns]
-    if 'オンコートH' not in df.columns: df['オンコートH'] = ""
-    if 'オンコートA' not in df.columns: df['オンコートA'] = ""
+    
+    if 'オンコートH' not in df.columns:
+        df['オンコートH'] = ""
+    if 'オンコートA' not in df.columns:
+        df['オンコートA'] = ""
+        
     df['点数'] = pd.to_numeric(df['点数'], errors='coerce').fillna(0).astype(int)
     return df
 
@@ -233,36 +284,60 @@ def load_csv_data():
             if set(['id', 'Q', 'チーム', '名前', '項目', '詳細', '結果', '点数']).issubset(df.columns):
                 st.session_state.history = df
                 teams = [t for t in df['チーム'].unique() if t and str(t).upper() != 'UNKNOWN']
-                csv_h, csv_a = st.session_state.home_name, st.session_state.away_name
+                csv_h = st.session_state.home_name
+                csv_a = st.session_state.away_name
+                
                 if len(teams) == 1:
-                    if teams[0] != csv_a: csv_h = teams[0]
-                    else: csv_a = teams[0]
+                    if teams[0] != csv_a:
+                        csv_h = teams[0]
+                    else:
+                        csv_a = teams[0]
                 elif len(teams) >= 2:
                     if st.session_state.home_name in teams:
-                        csv_h = st.session_state.home_name; csv_a = [t for t in teams if t != csv_h][0]
+                        csv_h = st.session_state.home_name
+                        csv_a = [t for t in teams if t != csv_h][0]
                     elif st.session_state.away_name in teams:
-                        csv_a = st.session_state.away_name; csv_h = [t for t in teams if t != csv_a][0]
+                        csv_a = st.session_state.away_name
+                        csv_h = [t for t in teams if t != csv_a][0]
                     else:
-                        csv_h, csv_a = teams[0], teams[1]
-                st.session_state.home_name = csv_h; st.session_state.away_name = csv_a
+                        csv_h = teams[0]
+                        csv_a = teams[1]
+                        
+                st.session_state.home_name = csv_h
+                st.session_state.away_name = csv_a
+                
                 def extract_exact_players(team_name):
                     p_list = df[df['チーム'] == team_name]['名前'].dropna().unique()
                     res = []
                     for p in p_list:
                         p_str = str(p).strip()
-                        if p_str.endswith('番'): p_str = p_str[:-1]
-                        if p_str.upper() not in ['TEAM', 'NAN', 'NONE', '']: res.append(p_str)
+                        if p_str.endswith('番'):
+                            p_str = p_str[:-1]
+                        if p_str.upper() not in ['TEAM', 'NAN', 'NONE', '']:
+                            res.append(p_str)
                     return sorted(res, key=safe_sort_key)
+                    
                 h_p = extract_exact_players(csv_h)
-                if h_p: st.session_state.r_str_h = ",".join(h_p); st.session_state.act_h = h_p[:5]
+                if h_p:
+                    st.session_state.r_str_h = ",".join(h_p)
+                    st.session_state.act_h = h_p[:5]
+                    
                 a_p = extract_exact_players(csv_a)
-                if a_p: st.session_state.r_str_a = ",".join(a_p); st.session_state.act_a = a_p[:5]
+                if a_p:
+                    st.session_state.r_str_a = ",".join(a_p)
+                    st.session_state.act_a = a_p[:5]
+                    
                 st.session_state.report_trigger = True
                 save_state()
                 st.toast(f"✅ データを完全に復元しました！")
-            else: st.error("対応していないCSV形式です。")
-        except Exception as e: st.error(f"読み込みエラー: {e}")
+            else:
+                st.error("対応していないCSV形式です。")
+        except Exception as e:
+            st.error(f"読み込みエラー: {e}")
 
+# ==========================================
+# サイドバー（設定メニュー）
+# ==========================================
 with st.sidebar:
     st.success(f"👤 現在の使用者: **{ROOM}**")
     mode_str = "👀 見るだけモード" if st.session_state.read_only else "✍️ 記録中（編集可）"
@@ -274,54 +349,81 @@ with st.sidebar:
         encoded_url = urllib.parse.quote(APP_URL)
         st.image(f"https://api.qrserver.com/v1/create-qr-code/?size=150x150&data={encoded_url}", use_container_width=True)
         st.code(APP_URL, language="text")
+        
     st.divider()
 
     if not st.session_state.read_only:
         st.header("🏆 試合設定")
+        
         col_date, col_num = st.columns([2, 1])
         col_date.text_input("📅 日時", key="match_date")
         col_num.text_input("🔢 試合目", key="match_number")
         st.text_input("📝 大会名", key="tournament_name")
         st.divider()
+        
         st.text_input("🔵 自チーム名", key="home_name")
         st.text_input(f"🔵 新規選手を追加", placeholder="例: 13", key="new_h_input")
         st.button("＋追加＆出場", key="add_h", use_container_width=True, on_click=add_h_player)
-        with st.expander(f"👥 {st.session_state.home_name} 名簿を手動編集"): st.text_area("全背番号 (カンマ区切り)", key="r_str_h")
+        
+        with st.expander(f"👥 {st.session_state.home_name} 名簿を手動編集"):
+            st.text_area("全背番号 (カンマ区切り)", key="r_str_h")
+            
         all_h = [x.strip() for x in st.session_state.r_str_h.split(",") if x.strip()]
         valid_act_h = [x for x in st.session_state.act_h if x in all_h]
-        if st.session_state.act_h != valid_act_h: st.session_state.act_h = valid_act_h
+        if st.session_state.act_h != valid_act_h:
+            st.session_state.act_h = valid_act_h
+            
         st.multiselect(f"🔵 {st.session_state.home_name} オンコート", options=all_h, key="act_h")
         st.divider()
+        
         st.button("🔁 HOMEとAWAYを入れ替える", use_container_width=True, on_click=swap_teams)
         st.divider()
+        
         st.text_input("🔴 相手チーム名", key="away_name")
         st.text_input(f"🔴 新規選手を追加", placeholder="例: ⑨", key="new_a_input")
         st.button("＋追加＆出場", key="add_a", use_container_width=True, on_click=add_a_player)
-        with st.expander(f"👥 {st.session_state.away_name} 名簿を手動編集"): st.text_area("全背番号 (カンマ区切り)", key="r_str_a")
+        
+        with st.expander(f"👥 {st.session_state.away_name} 名簿を手動編集"):
+            st.text_area("全背番号 (カンマ区切り)", key="r_str_a")
+            
         all_a = [x.strip() for x in st.session_state.r_str_a.split(",") if x.strip()]
         valid_act_a = [x for x in st.session_state.act_a if x in all_a]
-        if st.session_state.act_a != valid_act_a: st.session_state.act_a = valid_act_a
+        if st.session_state.act_a != valid_act_a:
+            st.session_state.act_a = valid_act_a
+            
         st.multiselect(f"🔴 {st.session_state.away_name} オンコート", options=all_a, key="act_a")
         st.divider()
-        with st.expander("📂 過去データを復元・確認 (1試合用)"): st.file_uploader("詳細ログCSVを選択", type=["csv"], label_visibility="collapsed", key="uploaded_file", on_change=load_csv_data)
+        
+        with st.expander("📂 過去データを復元・確認 (1試合用)"):
+            st.file_uploader("詳細ログCSVを選択", type=["csv"], label_visibility="collapsed", key="uploaded_file", on_change=load_csv_data)
+            
         st.divider()
         st.button("🚨 全データリセット (新規試合)", type="primary", use_container_width=True, on_click=reset_all_data)
 
-# --- 共通計算・グラフ関数 ---
+# ==========================================
+# 共通計算関数（グラフ描画用）
+# ==========================================
 def calculate_pm(p_num_str, target_team, df_events):
-    if 'オンコートH' not in df_events.columns or 'オンコートA' not in df_events.columns: return 0
+    if 'オンコートH' not in df_events.columns or 'オンコートA' not in df_events.columns:
+        return 0
     pm = 0
     score_events = df_events[df_events['点数'] > 0]
     for _, row in score_events.iterrows():
         in_h = str(p_num_str) in str(row['オンコートH']).split(',')
         in_a = str(p_num_str) in str(row['オンコートA']).split(',')
         if in_h or in_a:
-            pm += row['点数'] if row['チーム'] == target_team else -row['点数']
+            if row['チーム'] == target_team:
+                pm += row['点数']
+            else:
+                pm -= row['点数']
     return pm
 
 def draw_stacked_chart(df, x_col, max_y):
-    if df.empty: return
+    if df.empty:
+        return
+        
     df_m = df.reset_index().melt(id_vars=x_col, var_name='結果', value_name='回数')
+    
     bars = alt.Chart(df_m).mark_bar().encode(
         x=alt.X(f"{x_col}:N", sort=None, title='', axis=alt.Axis(labelAngle=-45, labelOverlap=False)),
         y=alt.Y('回数:Q', scale=alt.Scale(domain=[0, max_y]), title='回数'),
@@ -329,59 +431,83 @@ def draw_stacked_chart(df, x_col, max_y):
         order=alt.Order('結果:N', sort='ascending'),
         tooltip=[f"{x_col}:N", '結果:N', '回数:Q']
     )
+    
     df_txt = df.copy()
-    if '成功' not in df_txt.columns: df_txt['成功'] = 0
-    if '失敗' not in df_txt.columns: df_txt['失敗'] = 0
+    if '成功' not in df_txt.columns:
+        df_txt['成功'] = 0
+    if '失敗' not in df_txt.columns:
+        df_txt['失敗'] = 0
+        
     df_txt['Total'] = df_txt['成功'] + df_txt['失敗']
     df_txt['Label'] = df_txt['成功'].astype(int).astype(str) + "/" + df_txt['Total'].astype(int).astype(str)
     df_txt = df_txt[df_txt['Total'] > 0].reset_index()
+    
     total_text = alt.Chart(df_txt).mark_text(dy=-10, color='black', fontWeight='bold', fontSize=12).encode(
         x=alt.X(f"{x_col}:N", sort=None), 
         y=alt.Y('Total:Q'), 
         text='Label:N'
     )
+    
     chart = alt.layer(bars, total_text).properties(height=250)
     st.altair_chart(chart, use_container_width=True)
 
 def draw_simple_bar_chart(s, x_name, max_y, sort_order, color_range=None):
-    if s.empty: return
+    if s.empty:
+        return
+        
     df = s.to_frame(name='回数').reset_index()
     df.columns = [x_name, '回数']
-    color_encode = alt.Color(f'{x_name}:N', legend=None)
-    if color_range: color_encode = alt.Color(f'{x_name}:N', scale=alt.Scale(domain=sort_order, range=color_range), legend=None)
+    
+    if color_range:
+        color_encode = alt.Color(f'{x_name}:N', scale=alt.Scale(domain=sort_order, range=color_range), legend=None)
+    else:
+        color_encode = alt.Color(f'{x_name}:N', legend=None)
+        
     bars = alt.Chart(df).mark_bar().encode(
         x=alt.X(f"{x_name}:N", sort=sort_order, title='', axis=alt.Axis(labelAngle=0, labelOverlap=False)),
-        y=alt.Y('回数:Q', scale=alt.Scale(domain=[0, max_y]), title='回数'), color=color_encode, tooltip=[f"{x_name}:N", '回数:Q']
+        y=alt.Y('回数:Q', scale=alt.Scale(domain=[0, max_y]), title='回数'),
+        color=color_encode,
+        tooltip=[f"{x_name}:N", '回数:Q']
     )
+    
     df_text = df[df['回数'] > 0].copy()
     text = alt.Chart(df_text).mark_text(dy=-8, color='black', fontWeight='bold', fontSize=12).encode(
-        x=alt.X(f"{x_name}:N", sort=sort_order), y=alt.Y('回数:Q'), text='回数:Q'
+        x=alt.X(f"{x_name}:N", sort=sort_order),
+        y=alt.Y('回数:Q'),
+        text='回数:Q'
     )
+    
     chart = alt.layer(bars, text).properties(height=200)
     st.altair_chart(chart, use_container_width=True)
 
 def get_shot_stats(df):
     sh = df[df['項目'].isin(['2P', '3P', 'FT'])]
-    if sh.empty: return pd.DataFrame(columns=['成功', '失敗'], index=['2P', '3P', 'FT']).fillna(0)
+    if sh.empty:
+        return pd.DataFrame(columns=['成功', '失敗'], index=['2P', '3P', 'FT']).fillna(0)
     stats = sh.groupby(['項目', '結果']).size().unstack(fill_value=0)
     for c in ['成功', '失敗']:
-        if c not in stats.columns: stats[c] = 0
+        if c not in stats.columns:
+            stats[c] = 0
     return stats[['成功', '失敗']].reindex(['2P', '3P', 'FT'], fill_value=0)
 
 def get_area_stats(df, target, areas_order):
     sh = df[df['項目'] == target]
-    if sh.empty: return pd.DataFrame(columns=['成功', '失敗'], index=areas_order).fillna(0)
+    if sh.empty:
+        return pd.DataFrame(columns=['成功', '失敗'], index=areas_order).fillna(0)
     stats = sh.groupby(['詳細', '結果']).size().unstack(fill_value=0)
     for c in ['成功', '失敗']:
-        if c not in stats.columns: stats[c] = 0
+        if c not in stats.columns:
+            stats[c] = 0
     return stats[['成功', '失敗']].reindex(areas_order, fill_value=0)
 
 def get_reb_stats(df):
     sh = df[df['項目'].isin(['OR', 'DR'])]
-    if sh.empty: return pd.Series({'OR':0, 'DR':0, 'Total':0})
+    if sh.empty:
+        return pd.Series({'OR':0, 'DR':0, 'Total':0})
     stats = sh.groupby('項目').size()
     for c in ['OR', 'DR']:
-        if c not in stats.index: stats[c] = 0
+        if c not in stats.index:
+            stats[c] = 0
     s = stats[['OR', 'DR']].copy()
     s['Total'] = s.sum()
     return s
@@ -389,62 +515,111 @@ def get_reb_stats(df):
 def get_to_stats(df):
     sh = df[df['項目'] == 'TO']
     to_cols = ['TV', 'DD', 'PM', '24S']
-    if sh.empty: return pd.Series({c:0 for c in to_cols + ['Total']})
+    if sh.empty:
+        return pd.Series({c:0 for c in to_cols + ['Total']})
     stats = sh.groupby('詳細').size()
     for c in to_cols:
-        if c not in stats.index: stats[c] = 0
+        if c not in stats.index:
+            stats[c] = 0
     s = stats[to_cols].copy()
     s['Total'] = s.sum()
     return s
 
 def generate_coach_advice(df, home_name, away_name):
-    if df.empty: return "データが十分にありません。"
-    h_df = df[df['チーム'] == home_name]; a_df = df[df['チーム'] == away_name]
-    if h_df.empty: return f"{home_name}のデータがありません。"
+    if df.empty:
+        return "データが十分にありません。"
+        
+    h_df = df[df['チーム'] == home_name]
+    a_df = df[df['チーム'] == away_name]
+    
+    if h_df.empty:
+        return f"{home_name}のデータがありません。"
+        
     good, bad = [], []
-    h_pts = h_df['点数'].sum(); a_pts = a_df['点数'].sum()
-    h_2p = h_df[h_df['項目'] == '2P']; h_2p_pct = len(h_2p[h_2p['結果']=='成功']) / len(h_2p) if len(h_2p) > 0 else 0
-    h_3p = h_df[h_df['項目'] == '3P']; h_3p_pct = len(h_3p[h_3p['結果']=='成功']) / len(h_3p) if len(h_3p) > 0 else 0
-    h_ft = h_df[h_df['項目'] == 'FT']; h_ft_pct = len(h_ft[h_ft['結果']=='成功']) / len(h_ft) if len(h_ft) > 0 else 0
-    h_or, h_dr = len(h_df[h_df['項目'] == 'OR']), len(h_df[h_df['項目'] == 'DR'])
-    a_or, a_dr = len(a_df[a_df['項目'] == 'OR']), len(a_df[a_df['項目'] == 'DR'])
-    h_reb, a_reb = h_or + h_dr, a_or + a_dr
-    h_ast = len(h_df[h_df['項目'] == 'AST']); h_to = len(h_df[h_df['項目'] == 'TO'])
-    h_pm = len(h_df[(h_df['項目'] == 'TO') & (h_df['詳細'] == 'PM')]); h_foul = len(h_df[h_df['項目'] == 'Foul'])
-    h_blk = len(h_df[h_df['項目'] == 'BLK']); h_def = len(h_df[h_df['項目'] == 'DEF'])
+    
+    h_pts = h_df['点数'].sum()
+    a_pts = a_df['点数'].sum()
+    
+    h_2p = h_df[h_df['項目'] == '2P']
+    h_2p_pct = len(h_2p[h_2p['結果']=='成功']) / len(h_2p) if len(h_2p) > 0 else 0
+    
+    h_3p = h_df[h_df['項目'] == '3P']
+    h_3p_pct = len(h_3p[h_3p['結果']=='成功']) / len(h_3p) if len(h_3p) > 0 else 0
+    
+    h_ft = h_df[h_df['項目'] == 'FT']
+    h_ft_pct = len(h_ft[h_ft['結果']=='成功']) / len(h_ft) if len(h_ft) > 0 else 0
+    
+    h_or = len(h_df[h_df['項目'] == 'OR'])
+    h_dr = len(h_df[h_df['項目'] == 'DR'])
+    a_or = len(a_df[a_df['項目'] == 'OR'])
+    a_dr = len(a_df[a_df['項目'] == 'DR'])
+    
+    h_reb = h_or + h_dr
+    a_reb = a_or + a_dr
+    
+    h_ast = len(h_df[h_df['項目'] == 'AST'])
+    h_to = len(h_df[h_df['項目'] == 'TO'])
+    h_pm = len(h_df[(h_df['項目'] == 'TO') & (h_df['詳細'] == 'PM')])
+    h_foul = len(h_df[h_df['項目'] == 'Foul'])
+    h_blk = len(h_df[h_df['項目'] == 'BLK'])
+    h_def = len(h_df[h_df['項目'] == 'DEF'])
 
-    if h_3p_pct >= 0.33 and len(h_3p) >= 3: good.append(f"🎯 **外角のシュートタッチが良好！** (3P成功率: {h_3p_pct*100:.1f}%) この調子でスペーシングを広く保ちましょう。")
-    if h_or > a_or and h_or >= 3: good.append(f"💪 **オフェンスリバウンドで圧倒！** ({h_or}本) 泥臭いプレイがセカンドチャンスを生んでいます。")
-    if h_ast >= 5: good.append(f"🤝 **ボールがよく回っています！** ({h_ast}アシスト) 個人技に頼らない素晴らしいチームオフェンスです。")
-    if h_blk >= 3: good.append(f"🛡️ **リムプロテクトが機能しています！** ({h_blk}ブロック) インサイドの守備が引き締まっています。")
-    if h_def >= 5: good.append(f"🖐️ **ディフレクション（手を出す守備）が素晴らしい！** ({h_def}回) 球際への執念が相手の脅威になっています。")
+    if h_3p_pct >= 0.33 and len(h_3p) >= 3:
+        good.append(f"🎯 **外角のシュートタッチが良好！** (3P成功率: {h_3p_pct*100:.1f}%) この調子でスペーシングを広く保ちましょう。")
+    if h_or > a_or and h_or >= 3:
+        good.append(f"💪 **オフェンスリバウンドで圧倒！** ({h_or}本) 泥臭いプレイがセカンドチャンスを生んでいます。")
+    if h_ast >= 5:
+        good.append(f"🤝 **ボールがよく回っています！** ({h_ast}アシスト) 個人技に頼らない素晴らしいチームオフェンスです。")
+    if h_blk >= 3:
+        good.append(f"🛡️ **リムプロテクトが機能しています！** ({h_blk}ブロック) インサイドの守備が引き締まっています。")
+    if h_def >= 5:
+        good.append(f"🖐️ **ディフレクション（手を出す守備）が素晴らしい！** ({h_def}回) 球際への執念が相手の脅威になっています。")
     
     if not good:
-        if h_pts > a_pts: good.append("🔥 **リードを保っています！** 今のリズムを崩さず、ディフェンスから速攻を狙いましょう。")
-        else: good.append("🛡️ **まずはディフェンスから！** 苦しい時間帯ですが、1回のストップから流れを引き寄せましょう。")
+        if h_pts > a_pts:
+            good.append("🔥 **リードを保っています！** 今のリズムを崩さず、ディフェンスから速攻を狙いましょう。")
+        else:
+            good.append("🛡️ **まずはディフェンスから！** 苦しい時間帯ですが、1回のストップから流れを引き寄せましょう。")
 
-    if h_2p_pct < 0.40 and len(h_2p) > 5: bad.append(f"⚠️ **ペイント付近のフィニッシュ精度に課題** (2P成功率: {h_2p_pct*100:.1f}%)。無理なタフショットを減らし、確実なシュートセレクションを。")
-    if h_reb < a_reb: bad.append(f"⚠️ **リバウンドで劣勢です** (総数 {h_reb} 対 {a_reb})。全員で徹底したスクリーンアウト(ボックスアウト)を意識してください。")
+    if h_2p_pct < 0.40 and len(h_2p) > 5:
+        bad.append(f"⚠️ **ペイント付近のフィニッシュ精度に課題** (2P成功率: {h_2p_pct*100:.1f}%)。無理なタフショットを減らし、確実なシュートセレクションを。")
+    if h_reb < a_reb:
+        bad.append(f"⚠️ **リバウンドで劣勢です** (総数 {h_reb} 対 {a_reb})。全員で徹底したスクリーンアウト(ボックスアウト)を意識してください。")
     if h_to >= 5:
-        if h_pm >= 3: bad.append(f"⚠️ **パスミス(PM)が目立ちます** ({h_pm}回)。無理なパスを避け、まずは安全なボール運びを！")
-        else: bad.append(f"⚠️ **ターンオーバーが多いです** ({h_to}回)。自滅によるポゼッション献上は相手を勢いづけます。ボールを大切に。")
-    if h_ft_pct < 0.60 and len(h_ft) >= 4: bad.append(f"⚠️ **フリースローを取りこぼしています** (成功率: {h_ft_pct*100:.1f}%)。ノーマークの確実な得点源です、集中して打ちましょう。")
-    if h_foul >= 6: bad.append(f"⚠️ **ファウルトラブルに注意** ({h_foul}回)。不要な手を出さず、足で守るディフェンスを徹底してください。")
-    if not bad: bad.append("✨ **大きな崩れはありません！** 今のプレイスタイルを継続し、さらにインテンシティを高めていきましょう。")
+        if h_pm >= 3:
+            bad.append(f"⚠️ **パスミス(PM)が目立ちます** ({h_pm}回)。無理なパスを避け、まずは安全なボール運びを！")
+        else:
+            bad.append(f"⚠️ **ターンオーバーが多いです** ({h_to}回)。自滅によるポゼッション献上は相手を勢いづけます。ボールを大切に。")
+    if h_ft_pct < 0.60 and len(h_ft) >= 4:
+        bad.append(f"⚠️ **フリースローを取りこぼしています** (成功率: {h_ft_pct*100:.1f}%)。ノーマークの確実な得点源です、集中して打ちましょう。")
+    if h_foul >= 6:
+        bad.append(f"⚠️ **ファウルトラブルに注意** ({h_foul}回)。不要な手を出さず、足で守るディフェンスを徹底してください。")
+        
+    if not bad:
+        bad.append("✨ **大きな崩れはありません！** 今のプレイスタイルを継続し、さらにインテンシティを高めていきましょう。")
 
     html = "<div class='advice-box'><h4 style='margin-top:0;'>🟢 良かった点・継続すること</h4>"
-    for g in good: html += f"<p class='advice-good'>・{g}</p>"
+    for g in good:
+        html += f"<p class='advice-good'>・{g}</p>"
     html += "<h4>🔴 改善点・次への課題</h4>"
-    for b in bad: html += f"<p class='advice-bad'>・{b}</p>"
+    for b in bad:
+        html += f"<p class='advice-bad'>・{b}</p>"
     html += "</div>"
+    
     return html
 
+# ==========================================
+# 1試合レポート・ライブレポート描画本体
+# ==========================================
 def draw_report_body(df_history, home_name, away_name):
+    # 1. スコア推移
     st.header("1. スコア推移")
     try:
         rep_qs = df_history.groupby(['チーム', 'Q'])['点数'].sum().unstack(fill_value=0).reindex(index=[home_name, away_name], columns=["1Q", "2Q", "3Q", "4Q", "OT"], fill_value=0)
-        rep_qs['Total'] = rep_qs.sum(axis=1); st.table(rep_qs.astype(int))
-    except: pass
+        rep_qs['Total'] = rep_qs.sum(axis=1)
+        st.table(rep_qs.astype(int))
+    except:
+        pass
     
     st.subheader("📊 ゲームフロー（点差推移）")
     flow_df = df_history[df_history['点数'] > 0].copy()
@@ -469,18 +644,8 @@ def draw_report_body(df_history, home_name, away_name):
         )
         
         boundaries = plot_df.drop_duplicates(subset=['Q'], keep='first')
-        
-        rules = alt.Chart(boundaries).mark_rule(color='gray', strokeDash=[4, 4]).encode(
-            x=alt.X('seq:O')
-        )
-        
-        labels = alt.Chart(boundaries).mark_text(
-            align='left', baseline='bottom', dx=3, dy=-5, color='gray', fontSize=12, fontWeight='bold'
-        ).encode(
-            x=alt.X('seq:O'),
-            y=alt.value(0),
-            text='Q:N'
-        )
+        rules = alt.Chart(boundaries).mark_rule(color='gray', strokeDash=[4, 4]).encode(x=alt.X('seq:O'))
+        labels = alt.Chart(boundaries).mark_text(align='left', baseline='bottom', dx=3, dy=-5, color='gray', fontSize=12, fontWeight='bold').encode(x=alt.X('seq:O'), y=alt.value(0), text='Q:N')
         
         final_chart = alt.layer(bar_chart, rules, labels).properties(height=250)
         st.altair_chart(final_chart, use_container_width=True)
@@ -488,124 +653,226 @@ def draw_report_body(df_history, home_name, away_name):
     else:
         st.caption("得点データがありません")
 
+    # 2. 分析グラフ
     st.header("2. 分析グラフ")
     selected_q_graph = st.radio("グラフ対象期間", ["Total", "1Q", "2Q", "3Q", "4Q", "OT"], horizontal=True, label_visibility="collapsed")
-    if selected_q_graph == "Total": filtered_history = df_history
-    else: filtered_history = df_history[df_history['Q'] == selected_q_graph]
+    if selected_q_graph == "Total":
+        filtered_history = df_history
+    else:
+        filtered_history = df_history[df_history['Q'] == selected_q_graph]
+        
     h_players = ["全体"] + sorted([p.replace('番','') for p in filtered_history[filtered_history['チーム']==home_name]['名前'].unique() if p != 'TEAM'], key=safe_sort_key)
     sel_h = st.radio(f"🔵 {home_name} 選手選択", h_players, horizontal=True, label_visibility="collapsed")
+    
     a_players = ["全体"] + sorted([p.replace('番','') for p in filtered_history[filtered_history['チーム']==away_name]['名前'].unique() if p != 'TEAM'], key=safe_sort_key)
     sel_a = st.radio(f"🔴 {away_name} 選手選択", a_players, horizontal=True, label_visibility="collapsed")
 
     df_h_graph = filtered_history[filtered_history['チーム'] == home_name]
-    if sel_h != "全体": df_h_graph = df_h_graph[df_h_graph['名前'] == f"{sel_h}番"]
+    if sel_h != "全体":
+        df_h_graph = df_h_graph[df_h_graph['名前'] == f"{sel_h}番"]
+        
     df_a_graph = filtered_history[filtered_history['チーム'] == away_name]
-    if sel_a != "全体": df_a_graph = df_a_graph[df_a_graph['名前'] == f"{sel_a}番"]
+    if sel_a != "全体":
+        df_a_graph = df_a_graph[df_a_graph['名前'] == f"{sel_a}番"]
 
     st.subheader(f"① 全体シュート ({selected_q_graph})")
-    s_stats_h = get_shot_stats(df_h_graph); s_stats_a = get_shot_stats(df_a_graph)
+    s_stats_h = get_shot_stats(df_h_graph)
+    s_stats_a = get_shot_stats(df_a_graph)
     max_y_overall = max(s_stats_h.sum(axis=1).max(), s_stats_a.sum(axis=1).max())
     max_y_overall = int(max_y_overall * 1.15) + 1 if max_y_overall > 0 else 5
+    
     g1, g2 = st.columns(2)
     with g1:
         st.write(f"🔵 **{sel_h}**" if sel_h != "全体" else f"🔵 **{home_name}**")
-        if s_stats_h.sum().sum() > 0: draw_stacked_chart(s_stats_h, '項目', max_y_overall)
-        else: st.caption("データなし")
+        if s_stats_h.sum().sum() > 0:
+            draw_stacked_chart(s_stats_h, '項目', max_y_overall)
+        else:
+            st.caption("データなし")
     with g2:
         st.write(f"🔴 **{sel_a}**" if sel_a != "全体" else f"🔴 **{away_name}**")
-        if s_stats_a.sum().sum() > 0: draw_stacked_chart(s_stats_a, '項目', max_y_overall)
-        else: st.caption("データなし")
+        if s_stats_a.sum().sum() > 0:
+            draw_stacked_chart(s_stats_a, '項目', max_y_overall)
+        else:
+            st.caption("データなし")
 
     st.subheader(f"② エリア別シュート分布 ({selected_q_graph})")
     area_target = st.radio("表示項目", ["2P", "3P"], horizontal=True, label_visibility="collapsed", key="area_target_radio")
-    areas_order = ["左下", "中下", "右下", "左レ", "中レ", "右レ", "左角", "左45", "中", "中ミ", "右45", "右角"] if area_target == "2P" else ["左角", "左45", "中", "右45", "右角"]
-    a_stats_h = get_area_stats(df_h_graph, area_target, areas_order); a_stats_a = get_area_stats(df_a_graph, area_target, areas_order)
+    if area_target == "2P":
+        areas_order = ["左下", "中下", "右下", "左レ", "中レ", "右レ", "左角", "左45", "中", "中ミ", "右45", "右角"]
+    else:
+        areas_order = ["左角", "左45", "中", "右45", "右角"]
+        
+    a_stats_h = get_area_stats(df_h_graph, area_target, areas_order)
+    a_stats_a = get_area_stats(df_a_graph, area_target, areas_order)
     max_y_area = max(a_stats_h.sum(axis=1).max(), a_stats_a.sum(axis=1).max())
     max_y_area = int(max_y_area * 1.15) + 1 if max_y_area > 0 else 5
+    
     ga1, ga2 = st.columns(2)
     with ga1:
         st.write(f"🔵 **{sel_h}**" if sel_h != "全体" else f"🔵 **{home_name}**")
-        if a_stats_h.sum().sum() > 0: draw_stacked_chart(a_stats_h, '詳細', max_y_area)
-        else: st.caption("データなし")
+        if a_stats_h.sum().sum() > 0:
+            draw_stacked_chart(a_stats_h, '詳細', max_y_area)
+        else:
+            st.caption("データなし")
     with ga2:
         st.write(f"🔴 **{sel_a}**" if sel_a != "全体" else f"🔴 **{away_name}**")
-        if a_stats_a.sum().sum() > 0: draw_stacked_chart(a_stats_a, '詳細', max_y_area)
-        else: st.caption("データなし")
+        if a_stats_a.sum().sum() > 0:
+            draw_stacked_chart(a_stats_a, '詳細', max_y_area)
+        else:
+            st.caption("データなし")
 
     st.subheader(f"③ リバウンド ({selected_q_graph})")
-    r_stats_h = get_reb_stats(df_h_graph); r_stats_a = get_reb_stats(df_a_graph)
+    r_stats_h = get_reb_stats(df_h_graph)
+    r_stats_a = get_reb_stats(df_a_graph)
     max_y_reb = max(r_stats_h.max(), r_stats_a.max())
     max_y_reb = int(max_y_reb * 1.15) + 1 if max_y_reb > 0 else 5
+    
     gr1, gr2 = st.columns(2)
     with gr1:
         st.write(f"🔵 **{sel_h}**" if sel_h != "全体" else f"🔵 **{home_name}**")
-        if r_stats_h.sum() > 0: draw_simple_bar_chart(r_stats_h, '種類', max_y_reb, ['OR', 'DR', 'Total'], ['#ff9f43', '#3498db', '#2ecc71'])
-        else: st.caption("データなし")
+        if r_stats_h.sum() > 0:
+            draw_simple_bar_chart(r_stats_h, '種類', max_y_reb, ['OR', 'DR', 'Total'], ['#ff9f43', '#3498db', '#2ecc71'])
+        else:
+            st.caption("データなし")
     with gr2:
         st.write(f"🔴 **{sel_a}**" if sel_a != "全体" else f"🔴 **{away_name}**")
-        if r_stats_a.sum() > 0: draw_simple_bar_chart(r_stats_a, '種類', max_y_reb, ['OR', 'DR', 'Total'], ['#ff9f43', '#3498db', '#2ecc71'])
-        else: st.caption("データなし")
+        if r_stats_a.sum() > 0:
+            draw_simple_bar_chart(r_stats_a, '種類', max_y_reb, ['OR', 'DR', 'Total'], ['#ff9f43', '#3498db', '#2ecc71'])
+        else:
+            st.caption("データなし")
 
     st.subheader(f"④ ターンオーバー ({selected_q_graph})")
-    to_stats_h = get_to_stats(df_h_graph); to_stats_a = get_to_stats(df_a_graph)
+    to_stats_h = get_to_stats(df_h_graph)
+    to_stats_a = get_to_stats(df_a_graph)
     max_y_to = max(to_stats_h.max(), to_stats_a.max())
     max_y_to = int(max_y_to * 1.15) + 1 if max_y_to > 0 else 5
+    
     gt1, gt2 = st.columns(2)
     with gt1:
         st.write(f"🔵 **{sel_h}**" if sel_h != "全体" else f"🔵 **{home_name}**")
-        if to_stats_h.sum() > 0: draw_simple_bar_chart(to_stats_h, '詳細', max_y_to, ['TV', 'DD', 'PM', '24S', 'Total'], ['#95a5a6', '#95a5a6', '#95a5a6', '#95a5a6', '#e74c3c'])
-        else: st.caption("データなし")
+        if to_stats_h.sum() > 0:
+            draw_simple_bar_chart(to_stats_h, '詳細', max_y_to, ['TV', 'DD', 'PM', '24S', 'Total'], ['#95a5a6', '#95a5a6', '#95a5a6', '#95a5a6', '#e74c3c'])
+        else:
+            st.caption("データなし")
     with gt2:
         st.write(f"🔴 **{sel_a}**" if sel_a != "全体" else f"🔴 **{away_name}**")
-        if to_stats_a.sum() > 0: draw_simple_bar_chart(to_stats_a, '詳細', max_y_to, ['TV', 'DD', 'PM', '24S', 'Total'], ['#95a5a6', '#95a5a6', '#95a5a6', '#95a5a6', '#e74c3c'])
-        else: st.caption("データなし")
+        if to_stats_a.sum() > 0:
+            draw_simple_bar_chart(to_stats_a, '詳細', max_y_to, ['TV', 'DD', 'PM', '24S', 'Total'], ['#95a5a6', '#95a5a6', '#95a5a6', '#95a5a6', '#e74c3c'])
+        else:
+            st.caption("データなし")
 
+    # 3. 個人スタッツ
     st.header("3. 個人スタッツ")
     all_h = sorted([p.replace('番','') for p in df_history[df_history['チーム']==home_name]['名前'].unique() if p != 'TEAM'], key=safe_sort_key)
     all_a = sorted([p.replace('番','') for p in df_history[df_history['チーム']==away_name]['名前'].unique() if p != 'TEAM'], key=safe_sort_key)
 
     def get_full_stats(t_name, p_list_all):
         rows = []
-        tp, tm2i, tm2a, tm3i, tm3a, tfi, tfa, tor, tdr, tast, tstl, tblk, tdef, tf, ttv, tdd, tpm, ts24 = [0]*18
-        def fmt_stat(m, a): return f"{m}/{a}\n{(m/a*100):.0f}%" if a > 0 else "0/0\n0%"
+        tp = tm2i = tm2a = tm3i = tm3a = tfi = tfa = tor = tdr = tast = tstl = tblk = tdef = tf = ttv = tdd = tpm = ts24 = 0
+        
+        def fmt_stat(m, a):
+            return f"{m}/{a}\n{(m/a*100):.0f}%" if a > 0 else "0/0\n0%"
+            
         for p_num in p_list_all:
-            pn = f"{p_num}番"; pdf = df_history[(df_history['チーム']==t_name) & (df_history['名前']==pn)]
-            m2i, m2a = len(pdf[(pdf['項目']=='2P') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='2P'])
-            m3i, m3a = len(pdf[(pdf['項目']=='3P') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='3P'])
-            fi, fa = len(pdf[(pdf['項目']=='FT') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='FT'])
-            orb, drb = len(pdf[pdf['項目']=='OR']), len(pdf[pdf['項目']=='DR'])
-            ast, stl, f = len(pdf[pdf['項目']=='AST']), len(pdf[pdf['項目']=='STL']), len(pdf[pdf['項目']=='Foul'])
+            pn = f"{p_num}番"
+            pdf = df_history[(df_history['チーム']==t_name) & (df_history['名前']==pn)]
+            
+            m2i = len(pdf[(pdf['項目']=='2P') & (pdf['結果']=='成功')])
+            m2a = len(pdf[pdf['項目']=='2P'])
+            
+            m3i = len(pdf[(pdf['項目']=='3P') & (pdf['結果']=='成功')])
+            m3a = len(pdf[pdf['項目']=='3P'])
+            
+            fi = len(pdf[(pdf['項目']=='FT') & (pdf['結果']=='成功')])
+            fa = len(pdf[pdf['項目']=='FT'])
+            
+            orb = len(pdf[pdf['項目']=='OR'])
+            drb = len(pdf[pdf['項目']=='DR'])
+            
+            ast = len(pdf[pdf['項目']=='AST'])
+            stl = len(pdf[pdf['項目']=='STL'])
+            f = len(pdf[pdf['項目']=='Foul'])
+            
             blk = len(pdf[pdf['項目']=='BLK'])
             deflection = len(pdf[pdf['項目']=='DEF'])
-            to = pdf[pdf['項目']=='TO']; tv, dd, pm, s24 = len(to[to['詳細']=='TV']), len(to[to['詳細']=='DD']), len(to[to['詳細']=='PM']), len(to[to['詳細']=='24S'])
+            
+            to = pdf[pdf['項目']=='TO']
+            tv = len(to[to['詳細']=='TV'])
+            dd = len(to[to['詳細']=='DD'])
+            pm = len(to[to['詳細']=='PM'])
+            s24 = len(to[to['詳細']=='24S'])
+            
             p = pdf['点数'].sum()
-            tp+=p; tm2i+=m2i; tm2a+=m2a; tm3i+=m3i; tm3a+=m3a; tfi+=fi; tfa+=fa; tor+=orb; tdr+=drb; tast+=ast; tstl+=stl; tblk+=blk; tdef+=deflection; tf+=f; ttv+=tv; tdd+=dd; tpm+=pm; ts24+=s24
+            
+            tp+=p
+            tm2i+=m2i
+            tm2a+=m2a
+            tm3i+=m3i
+            tm3a+=m3a
+            tfi+=fi
+            tfa+=fa
+            tor+=orb
+            tdr+=drb
+            tast+=ast
+            tstl+=stl
+            tblk+=blk
+            tdef+=deflection
+            tf+=f
+            ttv+=tv
+            tdd+=dd
+            tpm+=pm
+            ts24+=s24
             
             pm_val = calculate_pm(p_num, t_name, df_history)
             
-            rows.append({'#': p_num, 'Pts': p, '+/-': f"{pm_val:+}", 'FG\n(M/A)': fmt_stat(m2i+m3i, m2a+m3a), '3P\n(M/A)': fmt_stat(m3i, m3a), 'FT\n(M/A)': fmt_stat(fi, fa), 
-                         'REB\n(D/O)': f"{drb+orb}\n({drb}/{orb})", 'As': ast, 'St': stl, 'Blk': blk, 'Def': deflection, 'F': f, 'TO\n(T/D/P/2)': f"{tv+dd+pm+s24}\n({tv}/{dd}/{pm}/{s24})", 'Team': t_name})
+            rows.append({
+                '#': p_num, 
+                'Pts': p, 
+                '+/-': f"{pm_val:+}", 
+                'FG\n(M/A)': fmt_stat(m2i+m3i, m2a+m3a), 
+                '3P\n(M/A)': fmt_stat(m3i, m3a), 
+                'FT\n(M/A)': fmt_stat(fi, fa), 
+                'REB\n(D/O)': f"{drb+orb}\n({drb}/{orb})", 
+                'As': ast, 
+                'St': stl, 
+                'Blk': blk, 
+                'Def': deflection, 
+                'F': f, 
+                'TO\n(T/D/P/2)': f"{tv+dd+pm+s24}\n({tv}/{dd}/{pm}/{s24})", 
+                'Team': t_name
+            })
         
         team_pts = df_history[df_history['チーム'] == t_name]['点数'].sum()
         opp_pts = df_history[df_history['チーム'] != t_name]['点数'].sum()
         total_pm = team_pts - opp_pts
         
-        rows.append({'#': 'Total', 'Pts': tp, '+/-': f"{total_pm:+}", 'FG\n(M/A)': fmt_stat(tm2i+tm3i, tm2a+tm3a), '3P\n(M/A)': fmt_stat(tm3i, tm3a), 'FT\n(M/A)': fmt_stat(tfi, tfa), 
-                     'REB\n(D/O)': f"{tdr+tor}\n({tdr}/{tor})", 'As': tast, 'St': tstl, 'Blk': tblk, 'Def': tdef, 'F': tf, 'TO\n(T/D/P/2)': f"{ttv+tdd+tpm+ts24}\n({ttv}/{tdd}/{tpm}/{ts24})", 'Team': t_name})
+        rows.append({
+            '#': 'Total', 
+            'Pts': tp, 
+            '+/-': f"{total_pm:+}", 
+            'FG\n(M/A)': fmt_stat(tm2i+tm3i, tm2a+tm3a), 
+            '3P\n(M/A)': fmt_stat(tm3i, tm3a), 
+            'FT\n(M/A)': fmt_stat(tfi, tfa), 
+            'REB\n(D/O)': f"{tdr+tor}\n({tdr}/{tor})", 
+            'As': tast, 
+            'St': tstl, 
+            'Blk': tblk, 
+            'Def': tdef, 
+            'F': tf, 
+            'TO\n(T/D/P/2)': f"{ttv+tdd+tpm+ts24}\n({ttv}/{tdd}/{tpm}/{ts24})", 
+            'Team': t_name
+        })
         return pd.DataFrame(rows)
     
-    st.write(f"🔵 **{home_name}**"); st.table(get_full_stats(home_name, all_h).drop(columns='Team').set_index('#'))
-    st.write(f"🔴 **{away_name}**"); st.table(get_full_stats(away_name, all_a).drop(columns='Team').set_index('#'))
+    st.write(f"🔵 **{home_name}**")
+    st.table(get_full_stats(home_name, all_h).drop(columns='Team').set_index('#'))
+    st.write(f"🔴 **{away_name}**")
+    st.table(get_full_stats(away_name, all_a).drop(columns='Team').set_index('#'))
     
     st.divider()
-    st.header("4. 💡 分析結果コメント（自動アドバイス）")
-    advice_html = generate_coach_advice(filtered_history, home_name, away_name)
-    st.markdown(advice_html, unsafe_allow_html=True)
-    
-    st.divider()
-    
-    # ★大改修：アシスト・ホットラインのヒートマップ化★
-    st.header("5. 🤝 アシスト・ホットライン解析")
+
+    # 4. アシスト・ホットライン解析
+    st.header("4. 🤝 アシスト・ホットライン解析")
     st.write("「誰が、誰にパスを出して得点に繋がったか」を視覚化します。色が濃いほど強力なコンビです！")
     
     ast_df = df_history[df_history['項目'] == 'AST']
@@ -619,14 +886,14 @@ def draw_report_body(df_history, home_name, away_name):
             scorer_p = scorer_match.group(1) if scorer_match else "不明"
             
             ast_records.append({
-                'チーム': ast_team,
-                'パサー': f"#{ast_p}",
+                'チーム': ast_team, 
+                'パサー': f"#{ast_p}", 
                 'シューター': f"#{scorer_p}"
             })
             
         ast_table = pd.DataFrame(ast_records)
-        
         hc1, hc2 = st.columns(2)
+        
         for i, t_name in enumerate([home_name, away_name]):
             t_ast = ast_table[ast_table['チーム'] == t_name]
             col = hc1 if i == 0 else hc2
@@ -637,8 +904,8 @@ def draw_report_body(df_history, home_name, away_name):
                     ast_counts = t_ast.groupby(['パサー', 'シューター']).size().reset_index(name='回数')
                     
                     base = alt.Chart(ast_counts).encode(
-                        x=alt.X('シューター:N', title='シューター (決めた人)', axis=alt.Axis(labelAngle=0)),
-                        y=alt.Y('パサー:N', title='パサー (パスを出した人)')
+                        x=alt.X('シューター:N', title='シューター', axis=alt.Axis(labelAngle=0)),
+                        y=alt.Y('パサー:N', title='パサー')
                     )
                     
                     heatmap = base.mark_rect().encode(
@@ -648,44 +915,48 @@ def draw_report_body(df_history, home_name, away_name):
                     text = base.mark_text(baseline='middle').encode(
                         text='回数:Q',
                         color=alt.condition(
-                            alt.datum.回数 > ast_counts['回数'].max() / 2,
-                            alt.value('white'),
+                            alt.datum.回数 > ast_counts['回数'].max() / 2, 
+                            alt.value('white'), 
                             alt.value('black')
                         )
                     )
                     
-                    chart_h = (heatmap + text).properties(height=200)
-                    st.altair_chart(chart_h, use_container_width=True)
+                    st.altair_chart((heatmap + text).properties(height=200), use_container_width=True)
                 else:
                     st.caption("アシスト記録なし")
     else:
         st.caption("アシスト記録がありません")
         
     st.divider()
+
+    # 5. 分析結果コメント
+    st.header("5. 💡 分析結果コメント（自動アドバイス）")
+    advice_html = generate_coach_advice(filtered_history, home_name, away_name)
+    st.markdown(advice_html, unsafe_allow_html=True)
+    
+    st.divider()
+    
+    # 6. 詳細ログ
     st.header("6. 📜 全プレイ履歴 (生データ)")
     st.dataframe(df_history.iloc[::-1], use_container_width=True)
 
+# ==========================================
+# シーズン成績タブ描画
+# ==========================================
 def draw_season_tab():
     st.header("📈 シーズン成績 ＆ 時系列推移")
-    st.write("過去の試合ログ(CSV)を複数読み込んで、チームの累計スタッツや選手の成長を分析できます。")
     
     target_team = st.text_input("🔍 分析対象チーム名（HOME）を入力", value=st.session_state.home_name, key="season_target_team")
-    
-    st.caption("※ファイル名のアルファベット・数字順（例: `20240415_01_試合.csv`）に自動で時系列化されます。")
+    st.caption("※ファイル名のアルファベット・数字順に自動で時系列化されます。")
     season_files = st.file_uploader("複数のログCSVを選択してください", type=["csv"], accept_multiple_files=True, key="season_files")
     
     if season_files:
         dfs = []
         match_order = []
+        
         for idx, file in enumerate(sorted(season_files, key=lambda x: x.name)):
             try:
-                try: 
-                    df = pd.read_csv(file, encoding='utf_8_sig')
-                except UnicodeDecodeError: 
-                    file.seek(0)
-                    df = pd.read_csv(file, encoding='cp932')
-                    
-                df.columns = [str(c).replace('\ufeff', '').strip() for c in df.columns]
+                df = parse_csv_bytes(file.getvalue())
                 if 'チーム' in df.columns:
                     away_teams = [str(t).strip() for t in df['チーム'].unique() if str(t).strip() != target_team and str(t).upper() != 'UNKNOWN']
                     away_name = away_teams[0] if away_teams else "不明"
@@ -694,186 +965,106 @@ def draw_season_tab():
                     df['Match_ID'] = m_id
                     match_order.append(m_id)
                     dfs.append(df)
-            except: pass
+            except:
+                pass
                 
         if dfs:
-            season_df = pd.concat(dfs, ignore_index=True)
-            season_df['点数'] = pd.to_numeric(season_df['点数'], errors='coerce').fillna(0).astype(int)
-            season_df['チーム'] = season_df['チーム'].astype(str).str.strip()
-            season_df['名前'] = season_df['名前'].astype(str).str.strip()
-            
-            h_season_df = season_df[season_df['チーム'] == target_team]
+            all_df = pd.concat(dfs, ignore_index=True)
+            h_season_df = all_df[all_df['チーム'] == target_team]
             
             if not h_season_df.empty:
-                st.success(f"✅ {len(dfs)}試合分のデータを読み込みました！ (対象: **{target_team}**)")
-                
-                match_info = {}
-                wins, losses, draws = 0, 0, 0
-                for m_id in match_order:
-                    m_df = season_df[season_df['Match_ID'] == m_id]
-                    h_pts = m_df[m_df['チーム'] == target_team]['点数'].sum()
-                    a_pts = m_df[m_df['チーム'] != target_team]['点数'].sum()
-                    if h_pts > a_pts: 
-                        wl = '勝'; wins += 1
-                    elif h_pts < a_pts: 
-                        wl = '負'; losses += 1
-                    else: 
-                        wl = '分'; draws += 1
-                    match_info[m_id] = {'勝敗': wl, 'スコア': f"{h_pts} - {a_pts}"}
-                
+                st.success(f"✅ {len(dfs)}試合分読込完了")
                 s_players = sorted([p.replace('番','') for p in h_season_df['名前'].unique() if p != 'TEAM'], key=safe_sort_key)
                 
-                st.subheader(f"① {target_team} チーム全体スタッツ")
-                st.markdown(f"##### 🏆 シーズン戦績: **{wins}勝 {losses}敗 {draws}分**")
-                
                 rows = []
-                tp, tm2i, tm2a, tm3i, tm3a, tfi, tfa, tor, tdr, tast, tstl, tblk, tdef, tf, tto = 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-                def fmt_stat(m, a): return f"{m}/{a}\n{(m/a*100):.0f}%" if a > 0 else "0/0\n0%"
+                tp = tm2i = tm2a = tm3i = tm3a = tfi = tfa = tor = tdr = tast = tstl = tblk = tdef = tf = tto = 0
                 
+                def fmt_stat(m, a):
+                    return f"{m}/{a}\n{(m/a*100):.0f}%" if a > 0 else "0/0\n0%"
+                    
                 for p_num in s_players:
                     pn = f"{p_num}番"
                     pdf = h_season_df[h_season_df['名前'] == pn]
                     games = pdf['Match_ID'].nunique()
-                    m2i, m2a = len(pdf[(pdf['項目']=='2P') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='2P'])
-                    m3i, m3a = len(pdf[(pdf['項目']=='3P') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='3P'])
-                    fi, fa = len(pdf[(pdf['項目']=='FT') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='FT'])
-                    orb, drb = len(pdf[pdf['項目']=='OR']), len(pdf[pdf['項目']=='DR'])
-                    ast, stl, f, to = len(pdf[pdf['項目']=='AST']), len(pdf[pdf['項目']=='STL']), len(pdf[pdf['項目']=='Foul']), len(pdf[pdf['項目']=='TO'])
+                    
+                    m2i = len(pdf[(pdf['項目']=='2P') & (pdf['結果']=='成功')])
+                    m2a = len(pdf[pdf['項目']=='2P'])
+                    
+                    m3i = len(pdf[(pdf['項目']=='3P') & (pdf['結果']=='成功')])
+                    m3a = len(pdf[pdf['項目']=='3P'])
+                    
+                    fi = len(pdf[(pdf['項目']=='FT') & (pdf['結果']=='成功')])
+                    fa = len(pdf[pdf['項目']=='FT'])
+                    
+                    orb = len(pdf[pdf['項目']=='OR'])
+                    drb = len(pdf[pdf['項目']=='DR'])
+                    
+                    ast = len(pdf[pdf['項目']=='AST'])
+                    stl = len(pdf[pdf['項目']=='STL'])
+                    f = len(pdf[pdf['項目']=='Foul'])
+                    to = len(pdf[pdf['項目']=='TO'])
                     blk = len(pdf[pdf['項目']=='BLK'])
                     deflection = len(pdf[pdf['項目']=='DEF'])
+                    
                     pts = pdf['点数'].sum()
                     
-                    tp+=pts; tm2i+=m2i; tm2a+=m2a; tm3i+=m3i; tm3a+=m3a; tfi+=fi; tfa+=fa; tor+=orb; tdr+=drb; tast+=ast; tstl+=stl; tblk+=blk; tdef+=deflection; tf+=f; tto+=to
+                    tp+=pts
+                    tm2i+=m2i
+                    tm2a+=m2a
+                    tm3i+=m3i
+                    tm3a+=m3a
+                    tfi+=fi
+                    tfa+=fa
+                    tor+=orb
+                    tdr+=drb
+                    tast+=ast
+                    tstl+=stl
+                    tblk+=blk
+                    tdef+=deflection
+                    tf+=f
+                    tto+=to
                     
-                    pm_val = calculate_pm(p_num, target_team, season_df)
+                    pm_val = calculate_pm(p_num, target_team, all_df)
                     
                     rows.append({
-                        '#': p_num, '試合': games, 'Pts': pts, 'AVG': f"{(pts/games):.1f}" if games > 0 else "0.0", '+/-': f"{pm_val:+}",
-                        'FG(M/A)': fmt_stat(m2i+m3i, m2a+m3a), '3P(M/A)': fmt_stat(m3i, m3a), 'FT(M/A)': fmt_stat(fi, fa),
-                        'REB(D/O)': f"{drb+orb}\n({drb}/{orb})", 'As': ast, 'St': stl, 'Blk': blk, 'Def': deflection, 'F': f, 'TO': to
+                        '#': p_num, 
+                        '試合': games, 
+                        'Pts': pts, 
+                        'AVG': f"{(pts/games):.1f}" if games > 0 else "0.0", 
+                        '+/-': f"{pm_val:+}",
+                        'FG(M/A)': fmt_stat(m2i+m3i, m2a+m3a), 
+                        'REB(D/O)': f"{drb+orb}\n({drb}/{orb})", 
+                        'As': ast, 
+                        'St': stl, 
+                        'Blk': blk, 
+                        'Def': deflection, 
+                        'F': f, 
+                        'TO': to
                     })
-                
-                total_games = h_season_df['Match_ID'].nunique()
-                total_pm = season_df[season_df['チーム'] == target_team]['点数'].sum() - season_df[season_df['チーム'] != target_team]['点数'].sum()
+                    
+                total_pm = all_df[all_df['チーム'] == target_team]['点数'].sum() - all_df[all_df['チーム'] != target_team]['点数'].sum()
                 
                 rows.append({
-                    '#': 'Total', '試合': total_games, 'Pts': tp, 'AVG': f"{(tp/total_games):.1f}" if total_games > 0 else "0.0", '+/-': f"{total_pm:+}",
-                    'FG(M/A)': fmt_stat(tm2i+tm3i, tm2a+tm3a), '3P(M/A)': fmt_stat(tm3i, tm3a), 'FT(M/A)': fmt_stat(tfi, tfa),
-                    'REB(D/O)': f"{tdr+tor}\n({tdr}/{tor})", 'As': tast, 'St': tstl, 'Blk': tblk, 'Def': tdef, 'F': tf, 'TO': tto
+                    '#': 'Total', 
+                    '試合': h_season_df['Match_ID'].nunique(), 
+                    'Pts': tp, 
+                    'AVG': f"{(tp/len(dfs)):.1f}", 
+                    '+/-': f"{total_pm:+}",
+                    'FG(M/A)': fmt_stat(tm2i+tm3i, tm2a+tm3a), 
+                    'REB(D/O)': f"{tdr+tor}\n({tdr}/{tor})", 
+                    'As': tast, 
+                    'St': tstl, 
+                    'Blk': tblk, 
+                    'Def': tdef, 
+                    'F': tf, 
+                    'TO': tto
                 })
-                season_stats_df = pd.DataFrame(rows)
-                st.dataframe(season_stats_df.set_index('#'), use_container_width=True)
                 
-                csv_season = season_stats_df.to_csv(index=False).encode('utf_8_sig')
-                st.download_button("📊 チーム累計スタッツをCSV保存", csv_season, f"{target_team}_season_stats.csv", "text/csv")
-                
-                st.divider()
-                
-                st.subheader("② 個人スタッツ ＆ 分析グラフ")
-                target_scope = st.selectbox("分析対象（チーム全体・個人）を選択してください", ["チーム全体"] + s_players)
-                
-                if target_scope == "チーム全体":
-                    target_df = h_season_df
-                else:
-                    target_df = h_season_df[h_season_df['名前'] == f"{target_scope}番"]
-                    
-                st.markdown(f"##### 📅 時系列スタッツ表 ({target_scope})")
-                ts_rows = []
-                def fmt_stat_inline(m, a): return f"{m}/{a} ({(m/a*100):.0f}%)" if a > 0 else "-"
-                def get_2p_stat(pdf_match, areas):
-                    target = pdf_match[(pdf_match['項目']=='2P') & (pdf_match['詳細'].isin(areas))]
-                    m = len(target[target['結果']=='成功']); a = len(target)
-                    return fmt_stat_inline(m, a)
-                
-                for match_id in match_order:
-                    pdf = target_df[target_df['Match_ID'] == match_id]
-                    if pdf.empty and target_scope != "チーム全体": continue
-                    
-                    m2i, m2a = len(pdf[(pdf['項目']=='2P') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='2P'])
-                    m3i, m3a = len(pdf[(pdf['項目']=='3P') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='3P'])
-                    fi, fa = len(pdf[(pdf['項目']=='FT') & (pdf['結果']=='成功')]), len(pdf[pdf['項目']=='FT'])
-                    orb, drb = len(pdf[pdf['項目']=='OR']), len(pdf[pdf['項目']=='DR'])
-                    ast, stl, f = len(pdf[pdf['項目']=='AST']), len(pdf[pdf['項目']=='STL']), len(pdf[pdf['項目']=='Foul'])
-                    blk = len(pdf[pdf['項目']=='BLK'])
-                    deflection = len(pdf[pdf['項目']=='DEF'])
-                    pts = pdf['点数'].sum()
-                    
-                    to = pdf[pdf['項目']=='TO']
-                    tv, dd, pm, s24 = len(to[to['詳細']=='TV']), len(to[to['詳細']=='DD']), len(to[to['詳細']=='PM']), len(to[to['詳細']=='24S'])
-                    
-                    in_paint = pdf[(pdf['項目']=='2P') & (pdf['詳細'].isin(['左下', '中下', '右下', '中', '中ミ']))]
-                    in_paint_i, in_paint_a = len(in_paint[in_paint['結果']=='成功']), len(in_paint)
-                    
-                    layup = pdf[(pdf['項目']=='2P') & (pdf['詳細'].isin(['左レ', '右レ']))]
-                    layup_i, layup_a = len(layup[layup['結果']=='成功']), len(layup)
-                    
-                    match_full_df = season_df[season_df['Match_ID'] == match_id]
-                    pm_match = calculate_pm(target_scope, target_team, match_full_df) if target_scope != "チーム全体" else (match_full_df[match_full_df['チーム'] == target_team]['点数'].sum() - match_full_df[match_full_df['チーム'] != target_team]['点数'].sum())
-                    
-                    ts_rows.append({
-                        '試合名': match_id,
-                        '勝敗': match_info[match_id]['勝敗'],
-                        'スコア': match_info[match_id]['スコア'],
-                        'Pts': pts, '+/-': pm_match,
-                        'FG': fmt_stat_inline(m2i+m3i, m2a+m3a), '3P': fmt_stat_inline(m3i, m3a), 'FT': fmt_stat_inline(fi, fa),
-                        'OR': orb, 'DR': drb, 'As': ast, 'St': stl, 'Blk': blk, 'Def': deflection, 'F': f,
-                        'TV': tv, 'DD': dd, 'PM(ﾊﾟｽﾐｽ)': pm, '24S': s24,
-                        'G下(ｲﾝｻｲﾄﾞ)': fmt_stat_inline(in_paint_i, in_paint_a),
-                        'ﾚｲｱｯﾌﾟ': fmt_stat_inline(layup_i, layup_a),
-                        '左角(ﾐﾄﾞﾙ)': get_2p_stat(pdf, ['左角']), '左45(ﾐﾄﾞﾙ)': get_2p_stat(pdf, ['左45']),
-                        '中ミ(ﾐﾄﾞﾙ)': get_2p_stat(pdf, ['中ミ']), '右45(ﾐﾄﾞﾙ)': get_2p_stat(pdf, ['右45']), '右角(ﾐﾄﾞﾙ)': get_2p_stat(pdf, ['右角'])
-                    })
-                    
-                ts_df = pd.DataFrame(ts_rows)
-                st.dataframe(ts_df.set_index('試合名'), use_container_width=True)
-                st.caption("💡 スワイプで横スクロール可能です。「スコア」は [自チーム - 相手チーム] の点数です。")
+                st.dataframe(pd.DataFrame(rows).set_index('#'), use_container_width=True)
 
-                st.markdown(f"##### 📊 累積スタッツ 棒グラフ ({target_scope})")
-                bc1, bc2 = st.columns(2)
-                with bc1:
-                    s_stats = get_shot_stats(target_df)
-                    max_y_overall = int(s_stats.sum(axis=1).max() * 1.15) + 1 if s_stats.sum().sum() > 0 else 5
-                    st.write("① シュート(2P/3P/FT)")
-                    if s_stats.sum().sum() > 0: draw_stacked_chart(s_stats, '項目', max_y_overall)
-                    else: st.caption("データなし")
-                    
-                    r_stats = get_reb_stats(target_df)
-                    max_y_reb = int(r_stats.max() * 1.15) + 1 if r_stats.sum() > 0 else 5
-                    st.write("③ リバウンド")
-                    if r_stats.sum() > 0: draw_simple_bar_chart(r_stats, '種類', max_y_reb, ['OR', 'DR', 'Total'], ['#ff9f43', '#3498db', '#2ecc71'])
-                    else: st.caption("データなし")
-                    
-                with bc2:
-                    a_stats_2p = get_area_stats(target_df, "2P", ["左下", "中下", "右下", "左レ", "中レ", "右レ", "左角", "左45", "中", "中ミ", "右45", "右角"])
-                    max_y_2p = int(a_stats_2p.sum(axis=1).max() * 1.15) + 1 if a_stats_2p.sum().sum() > 0 else 5
-                    st.write("② 2P エリア別")
-                    if a_stats_2p.sum().sum() > 0: draw_stacked_chart(a_stats_2p, '詳細', max_y_2p)
-                    else: st.caption("データなし")
-                    
-                    to_stats = get_to_stats(target_df)
-                    max_y_to = int(to_stats.max() * 1.15) + 1 if to_stats.sum() > 0 else 5
-                    st.write("④ ターンオーバー")
-                    if to_stats.sum() > 0: draw_simple_bar_chart(to_stats, '詳細', max_y_to, ['TV', 'DD', 'PM', '24S', 'Total'], ['#95a5a6', '#95a5a6', '#95a5a6', '#95a5a6', '#e74c3c'])
-                    else: st.caption("データなし")
-
-                st.markdown(f"##### 📉 時系列 折れ線グラフ ({target_scope})")
-                numeric_cols = ['Pts', '+/-', 'OR', 'DR', 'As', 'St', 'Blk', 'Def', 'F', 'PM(ﾊﾟｽﾐｽ)', 'TV', 'DD', '24S']
-                selected_stat = st.selectbox("グラフ化する項目を選択してください", numeric_cols, index=0)
-                
-                line_chart = alt.Chart(ts_df).mark_line(point=True, color='#e74c3c', strokeWidth=3).encode(
-                    x=alt.X('試合名:N', sort=match_order, title='', axis=alt.Axis(labelAngle=-45)),
-                    y=alt.Y(f'{selected_stat}:Q', title=selected_stat),
-                    tooltip=['試合名', '勝敗', 'スコア', selected_stat]
-                ).properties(height=300)
-                
-                text = line_chart.mark_text(align='center', baseline='bottom', dy=-10, fontSize=14, fontWeight='bold').encode(
-                    text=f'{selected_stat}:Q'
-                )
-                st.altair_chart(line_chart + text, use_container_width=True)
-            else:
-                st.warning(f"アップロードされたファイルに「{target_team}」のデータが見つかりません。上の入力欄の名前を確認してください。")
-
-# --- 記録者操作メニュー ---
+# ==========================================
+# 記録入力操作メニュー
+# ==========================================
 def record(item, detail="-", res="成功", pts=0, team=None, name=None):
     t_name = team if team else st.session_state.tmp.get('team', 'UNKNOWN')
     p_name = name if name else (f"{st.session_state.tmp['player']}番" if 'player' in st.session_state.tmp else "TEAM")
@@ -882,9 +1073,22 @@ def record(item, detail="-", res="成功", pts=0, team=None, name=None):
     onc_h = ",".join(st.session_state.act_h)
     onc_a = ",".join(st.session_state.act_a)
     
-    new_row = pd.DataFrame([{'id': new_id, 'Q': st.session_state.current_q, 'チーム': t_name, '名前': p_name, '項目': item, '詳細': detail, '結果': res, '点数': pts, 'オンコートH': onc_h, 'オンコートA': onc_a}])
+    new_row = pd.DataFrame([{
+        'id': new_id, 
+        'Q': st.session_state.current_q, 
+        'チーム': t_name, 
+        '名前': p_name, 
+        '項目': item, 
+        '詳細': detail, 
+        '結果': res, 
+        '点数': pts, 
+        'オンコートH': onc_h, 
+        'オンコートA': onc_a
+    }])
+    
     st.session_state.history = pd.concat([st.session_state.history, new_row], ignore_index=True)
-    st.session_state.mode = "選手選択"; st.toast(f"記録完了")
+    st.session_state.mode = "選手選択"
+    st.toast(f"記録完了")
 
 def draw_flat_zone(c_o, c_lbl, c_x, area_name, key_prefix, item_type):
     pts = 2 if item_type == "2P" else 3
@@ -910,77 +1114,93 @@ def draw_action_menu():
     with st.container(border=True):
         if st.session_state.mode == "項目選択":
             
-            # --- 1段目：シュート系（赤色） ---
-            st.markdown("<div style='font-size:12px; font-weight:bold; color:#e74c3c; margin-bottom:4px;'>🔥 シュート</div>", unsafe_allow_html=True)
+            st.markdown("<div style='font-size:12px; font-weight:bold; color:#e74c3c;'>🔥 シュート</div>", unsafe_allow_html=True)
             c = st.columns(3)
-            if c[0].button("2P", use_container_width=True, type="primary"): st.session_state.tmp['item']="2P"; st.session_state.mode="エリア＆結果選択"; safe_rerun()
-            if c[1].button("3P", use_container_width=True, type="primary"): st.session_state.tmp['item']="3P"; st.session_state.mode="エリア＆結果選択"; safe_rerun()
-            if c[2].button("FT", use_container_width=True, type="primary"): st.session_state.tmp['item']="FT"; st.session_state.mode="結果選択"; safe_rerun()
-            
-            st.markdown("<div style='margin-bottom:12px;'></div>", unsafe_allow_html=True)
-            
-            # --- 2段目：リバウンド・チャンス・守備・反則 ---
+            if c[0].button("2P", use_container_width=True, type="primary"):
+                st.session_state.tmp['item'] = "2P"
+                st.session_state.mode = "エリア＆結果選択"
+                safe_rerun()
+            if c[1].button("3P", use_container_width=True, type="primary"):
+                st.session_state.tmp['item'] = "3P"
+                st.session_state.mode = "エリア＆結果選択"
+                safe_rerun()
+            if c[2].button("FT", use_container_width=True, type="primary"):
+                st.session_state.tmp['item'] = "FT"
+                st.session_state.mode = "結果選択"
+                safe_rerun()
+                
             o = st.columns(4)
             with o[0]:
-                st.markdown("<div style='font-size:11px; font-weight:bold; color:#3498db; text-align:center; margin-bottom:2px;'>♻️ リバウンド</div>", unsafe_allow_html=True)
-                if st.button("OR", use_container_width=True): record("OR"); safe_rerun()
-                if st.button("DR", use_container_width=True): record("DR"); safe_rerun()
+                st.markdown("<div style='font-size:11px; font-weight:bold; color:#3498db; text-align:center;'>♻️リバ</div>", unsafe_allow_html=True)
+                if st.button("OR", use_container_width=True):
+                    record("OR")
+                    safe_rerun()
+                if st.button("DR", use_container_width=True):
+                    record("DR")
+                    safe_rerun()
             with o[1]:
-                st.markdown("<div style='font-size:11px; font-weight:bold; color:#2ecc71; text-align:center; margin-bottom:2px;'>⚡ チャンス</div>", unsafe_allow_html=True)
-                if st.button("AST", use_container_width=True): record("AST"); safe_rerun()
-                if st.button("STL", use_container_width=True): record("STL"); safe_rerun()
+                st.markdown("<div style='font-size:11px; font-weight:bold; color:#2ecc71; text-align:center;'>⚡チャンス</div>", unsafe_allow_html=True)
+                if st.button("AST", use_container_width=True):
+                    record("AST")
+                    safe_rerun()
+                if st.button("STL", use_container_width=True):
+                    record("STL")
+                    safe_rerun()
             with o[2]:
-                st.markdown("<div style='font-size:11px; font-weight:bold; color:#9b59b6; text-align:center; margin-bottom:2px;'>🛡️ 守備</div>", unsafe_allow_html=True)
-                if st.button("BLK", use_container_width=True): record("BLK"); safe_rerun()
-                if st.button("DEF", use_container_width=True): record("DEF"); safe_rerun()
+                st.markdown("<div style='font-size:11px; font-weight:bold; color:#9b59b6; text-align:center;'>🛡️守備</div>", unsafe_allow_html=True)
+                if st.button("BLK", use_container_width=True):
+                    record("BLK")
+                    safe_rerun()
+                if st.button("DEF", use_container_width=True):
+                    record("DEF")
+                    safe_rerun()
             with o[3]:
-                st.markdown("<div style='font-size:11px; font-weight:bold; color:#f39c12; text-align:center; margin-bottom:2px;'>⚠️ 反則</div>", unsafe_allow_html=True)
-                if st.button("F", use_container_width=True): record("Foul"); safe_rerun()
-                st.markdown("<div style='height:52px;'></div>", unsafe_allow_html=True)
-                
-            st.markdown("<div style='margin-bottom:12px;'></div>", unsafe_allow_html=True)
-            
-            # --- 3段目：ターンオーバー ---
-            st.markdown("<div style='font-size:12px; font-weight:bold; color:#7f8c8d; margin-bottom:4px;'>💥 ターンオーバー (TO)</div>", unsafe_allow_html=True)
+                st.markdown("<div style='font-size:11px; font-weight:bold; color:#f39c12; text-align:center;'>⚠️反則</div>", unsafe_allow_html=True)
+                if st.button("F", use_container_width=True):
+                    record("Foul")
+                    safe_rerun()
+                    
+            st.markdown("<div style='font-size:12px; font-weight:bold; color:#7f8c8d;'>💥 TO</div>", unsafe_allow_html=True)
             to_cols = st.columns(4)
             for i, val in enumerate(["TV", "DD", "PM", "24S"]):
-                if to_cols[i].button(val, use_container_width=True): record("TO", val); safe_rerun()
-            
-            st.divider()
-            if st.button("❌ キャンセル", use_container_width=True): st.session_state.mode="選手選択"; safe_rerun()
+                if to_cols[i].button(val, use_container_width=True):
+                    record("TO", val)
+                    safe_rerun()
+                    
+            if st.button("❌ キャンセル", use_container_width=True):
+                st.session_state.mode = "選手選択"
+                safe_rerun()
             
         elif st.session_state.mode == "エリア＆結果選択":
             it = st.session_state.tmp.get('item', '2P')
             if it == "2P":
                 st.markdown("<div style='text-align:center;'><span class='court-zone'>【 2P エリア 】</span></div>", unsafe_allow_html=True)
-                
                 r1 = st.columns([11,16,11, 4, 11,16,11, 10, 11,16,11, 4, 11,16,11])
                 draw_flat_zone(r1[0], r1[1], r1[2], "左角", "2p_lcor", "2P")
                 draw_flat_zone(r1[4], r1[5], r1[6], "左レ", "2p_ll", "2P") 
                 with r1[7]:
-                    st.markdown("<div style='text-align:center; font-size:24px; line-height:48px; margin:0px;'>🗑️</div>", unsafe_allow_html=True)
+                    st.markdown("<div style='text-align:center; font-size:24px; line-height:48px;'>🗑️</div>", unsafe_allow_html=True)
                 draw_flat_zone(r1[8], r1[9], r1[10], "右レ", "2p_rl", "2P") 
                 draw_flat_zone(r1[12], r1[13], r1[14], "右角", "2p_rcor", "2P")
-
+                
                 r2 = st.columns([16, 11,16,11, 12, 11,16,11, 12, 11,16,11, 16])
                 draw_flat_zone(r2[1], r2[2], r2[3], "左下", "2p_lbl", "2P") 
                 draw_flat_zone(r2[5], r2[6], r2[7], "中レ", "2p_cl", "2P")  
                 draw_flat_zone(r2[9], r2[10], r2[11], "右下", "2p_rbl", "2P") 
-
+                
                 r3 = st.columns([16, 11,16,11, 12, 11,16,11, 12, 11,16,11, 16])
                 draw_flat_zone(r3[1], r3[2], r3[3], "左45", "2p_l45", "2P")
                 draw_flat_zone(r3[5], r3[6], r3[7], "中下", "2p_cbl", "2P") 
                 draw_flat_zone(r3[9], r3[10], r3[11], "右45", "2p_r45", "2P")
-
+                
                 r4 = st.columns([16, 11,16,11, 12, 11,16,11, 12, 11,16,11, 16])
                 draw_flat_zone(r4[5], r4[6], r4[7], "中ミ", "2p_c", "2P")
-
-            else: 
-                # 3P
+                
+            else:
                 st.markdown("<div style='text-align:center; font-size:35px; margin-top:-10px; margin-bottom:5px;'>🗑️🏀</div>", unsafe_allow_html=True)
                 st.markdown("<div style='text-align:center; font-size:16px; color:#ccc; margin-bottom:10px;'>🔺 ペイントエリア 🔺</div>", unsafe_allow_html=True)
                 st.markdown("<div style='text-align:center;'><span class='court-zone'>【 3P エリア 】</span></div>", unsafe_allow_html=True)
-                
+
                 r3p_1 = st.columns([11,16,11, 94, 11,16,11])
                 draw_flat_zone(r3p_1[0], r3p_1[1], r3p_1[2], "左角", "3p_lcor", "3P")
                 draw_flat_zone(r3p_1[4], r3p_1[5], r3p_1[6], "右角", "3p_rcor", "3P")
@@ -991,61 +1211,70 @@ def draw_action_menu():
                 
                 r3p_3 = st.columns([66, 11,16,11, 66])
                 draw_flat_zone(r3p_3[1], r3p_3[2], r3p_3[3], "中", "3p_c", "3P")
-
-            st.divider()
-            if st.button("🔙 戻る", use_container_width=True): st.session_state.mode="項目選択"; safe_rerun()
-
-        elif st.session_state.mode == "結果選択": # FT用
+                
+            if st.button("🔙 戻る", use_container_width=True):
+                st.session_state.mode = "項目選択"
+                safe_rerun()
+                
+        elif st.session_state.mode == "結果選択":
             st.write(f"🎯 {st.session_state.tmp.get('area', 'FT')}")
             sc = st.columns(2)
-            item = st.session_state.tmp.get('item', 'FT')
             if sc[0].button("SUCCESS", use_container_width=True, type="primary"):
-                record(item, detail=st.session_state.tmp.get('area','-'), res="成功", pts=1)
+                record("FT", res="成功", pts=1)
                 safe_rerun()
-            if sc[1].button("MISS", use_container_width=True): 
-                record(item, detail=st.session_state.tmp.get('area','-'), res="失敗", pts=0)
+            if sc[1].button("MISS", use_container_width=True):
+                record("FT", res="失敗", pts=0)
                 st.session_state.mode = "リバウンド選択"
                 safe_rerun()
-            st.divider()
-            if st.button("🔙 戻る", use_container_width=True): st.session_state.mode="項目選択"; safe_rerun()
-
+                
+            if st.button("🔙 戻る", use_container_width=True):
+                st.session_state.mode = "項目選択"
+                safe_rerun()
+                
         elif st.session_state.mode == "アシスト選択":
             st.write(f"🏀 得点！アシストは？")
-            active_list = st.session_state.act_h if team_name == st.session_state.home_name else st.session_state.act_a
-            assist_candidates = [p for p in active_list if p != player_num]
-            if assist_candidates:
-                ast_c = st.columns(len(assist_candidates))
-                for i, p_num in enumerate(assist_candidates):
-                    if ast_c[i].button(p_num, key=f"ast_{p_num}", use_container_width=True):
-                        record("AST", detail=f"to #{player_num}", res="成功", pts=0, team=team_name, name=f"{p_num}番")
+            active = st.session_state.act_h if team_name == st.session_state.home_name else st.session_state.act_a
+            c = st.columns(len(active))
+            
+            for i, p in enumerate(active):
+                if p != player_num:
+                    if c[i].button(p, key=f"ast_{p}"):
+                        record("AST", detail=f"to #{player_num}", team=team_name, name=f"{p}番")
                         safe_rerun()
+                        
             st.divider()
-            if st.button("❌ アシストなし", use_container_width=True): st.session_state.mode = "選手選択"; safe_rerun()
-
+            if st.button("❌ アシストなし", use_container_width=True):
+                st.session_state.mode = "選手選択"
+                safe_rerun()
+                
         elif st.session_state.mode == "リバウンド選択":
             shooter_team = st.session_state.tmp.get('team')
             st.error(f"🗑️ シュートミス！ 誰がリバウンドを取った？")
             
             st.caption(f"🔵 {st.session_state.home_name}")
-            reb_h_cols = st.columns(len(st.session_state.act_h))
-            for i, p_num in enumerate(st.session_state.act_h):
-                if reb_h_cols[i].button(p_num, key=f"reb_h_{p_num}", use_container_width=True):
-                    reb_type = "OR" if st.session_state.home_name == shooter_team else "DR"
-                    record(reb_type, team=st.session_state.home_name, name=f"{p_num}番")
+            c_h = st.columns(len(st.session_state.act_h))
+            for i, p in enumerate(st.session_state.act_h):
+                if c_h[i].button(p, key=f"rbh_{p}"):
+                    reb_type = "OR" if team_name == st.session_state.home_name else "DR"
+                    record(reb_type, team=st.session_state.home_name, name=f"{p}番")
                     safe_rerun()
-
+                    
             st.caption(f"🔴 {st.session_state.away_name}")
-            reb_a_cols = st.columns(len(st.session_state.act_a))
-            for i, p_num in enumerate(st.session_state.act_a):
-                if reb_a_cols[i].button(p_num, key=f"reb_a_{p_num}", use_container_width=True):
-                    reb_type = "OR" if st.session_state.away_name == shooter_team else "DR"
-                    record(reb_type, team=st.session_state.away_name, name=f"{p_num}番")
+            c_a = st.columns(len(st.session_state.act_a))
+            for i, p in enumerate(st.session_state.act_a):
+                if c_a[i].button(p, key=f"rba_{p}"):
+                    reb_type = "OR" if team_name != st.session_state.home_name else "DR"
+                    record(reb_type, team=st.session_state.away_name, name=f"{p}番")
                     safe_rerun()
-            
+                    
             st.divider()
-            if st.button("⏩ リバウンド記録なし（スキップ）", use_container_width=True): st.session_state.mode = "選手選択"; safe_rerun()
+            if st.button("⏩ リバウンド記録なし（スキップ）", use_container_width=True):
+                st.session_state.mode = "選手選択"
+                safe_rerun()
 
-# --- メイン画面描画 ---
+# ==========================================
+# メイン画面描画
+# ==========================================
 if st.session_state.read_only:
     tab_single, tab_season = st.tabs(["📜 1試合レポート", "📈 シーズン成績"])
     
@@ -1064,24 +1293,32 @@ if st.session_state.read_only:
 
 else:
     tab_input, tab_report, tab_season, tab_edit = st.tabs(["✍️ 記録入力", "📄 試合レポート", "📈 シーズン成績", "🛠 修正"])
+    
     with tab_input:
         if not st.session_state.history.empty:
             try:
                 qs = st.session_state.history.groupby(['チーム', 'Q'])['点数'].sum().unstack(fill_value=0).reindex(index=[st.session_state.home_name, st.session_state.away_name], columns=["1Q", "2Q", "3Q", "4Q", "OT"], fill_value=0)
                 qs['Total'] = qs.sum(axis=1)
                 st.table(qs.astype(int))
-            except: pass
-        
+            except:
+                pass
+                
         st.radio("Q", ["1Q", "2Q", "3Q", "4Q", "OT"], horizontal=True, label_visibility="collapsed", key="current_q", on_change=safe_rerun)
 
         st.write(f"🔵 **{st.session_state.home_name}**")
-        if not st.session_state.act_h: st.warning("サイドバーで選手を選んでください")
+        if not st.session_state.act_h:
+            st.warning("サイドバーで選手を選んでください")
         else:
             cols_h = st.columns(len(st.session_state.act_h))
             for i, p_num in enumerate(st.session_state.act_h):
                 if cols_h[i].button(p_num, key=f"h_{p_num}", use_container_width=True):
-                    st.session_state.tmp = {'player': p_num, 'team': st.session_state.home_name}; st.session_state.mode = "項目選択"; safe_rerun()
-        if st.button(f"⏰ {st.session_state.home_name} TOUT", use_container_width=True): record("TOUT", team=st.session_state.home_name, name="TEAM"); safe_rerun()
+                    st.session_state.tmp = {'player': p_num, 'team': st.session_state.home_name}
+                    st.session_state.mode = "項目選択"
+                    safe_rerun()
+                    
+        if st.button(f"⏰ {st.session_state.home_name} TOUT", use_container_width=True):
+            record("TOUT", team=st.session_state.home_name, name="TEAM")
+            safe_rerun()
 
         if st.session_state.mode != "選手選択":
             st.markdown("<div style='margin: 15px 0;'></div>", unsafe_allow_html=True)
@@ -1091,16 +1328,23 @@ else:
         st.divider()
 
         st.write(f"🔴 **{st.session_state.away_name}**")
-        if not st.session_state.act_a: st.warning("サイドバーで選手を選んでください")
+        if not st.session_state.act_a:
+            st.warning("サイドバーで選手を選んでください")
         else:
             cols_a = st.columns(len(st.session_state.act_a))
             for i, p_num in enumerate(st.session_state.act_a):
                 if cols_a[i].button(p_num, key=f"a_{p_num}", use_container_width=True):
-                    st.session_state.tmp = {'player': p_num, 'team': st.session_state.away_name}; st.session_state.mode = "項目選択"; safe_rerun()
-        if st.button(f"⏰ {st.session_state.away_name} TOUT", use_container_width=True): record("TOUT", team=st.session_state.away_name, name="TEAM"); safe_rerun()
+                    st.session_state.tmp = {'player': p_num, 'team': st.session_state.away_name}
+                    st.session_state.mode = "項目選択"
+                    safe_rerun()
+                    
+        if st.button(f"⏰ {st.session_state.away_name} TOUT", use_container_width=True):
+            record("TOUT", team=st.session_state.away_name, name="TEAM")
+            safe_rerun()
 
     with tab_report:
-        if st.session_state.history.empty: st.info("データなし")
+        if st.session_state.history.empty:
+            st.info("データなし")
         else:
             if not st.session_state.report_trigger:
                 st.info("⚡ 試合中の入力スピードを最優先するため、グラフとスタッツは非表示になっています。")
@@ -1128,6 +1372,7 @@ else:
                 q_opts = ["1Q", "2Q", "3Q", "4Q", "OT"]
                 curr_q = row['Q']
                 curr_idx = q_opts.index(curr_q) if curr_q in q_opts else 0
+                
                 new_q = cols[0].selectbox("Q変更", q_opts, index=curr_idx, key=f"edit_q_{i}", label_visibility="collapsed")
                 
                 if new_q != curr_q:
@@ -1139,6 +1384,7 @@ else:
                 
                 res_mark = "⭕" if row['結果'] == '成功' else ("❌" if row['結果'] == '失敗' else "")
                 pts_str = f"({row['点数']}点)" if row['点数'] > 0 else ""
+                
                 cols[1].markdown(f"<div style='font-size:12px; margin-top:8px; line-height:1.2;'><b>{row['チーム']}</b><br>{row['名前']} | {row['項目']} {row['詳細']} {res_mark} {pts_str}</div>", unsafe_allow_html=True)
                 
                 if cols[2].button("🗑️", key=f"del_{i}"): 
