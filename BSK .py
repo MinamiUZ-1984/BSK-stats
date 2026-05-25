@@ -13,7 +13,7 @@ import urllib.parse
 # ==========================================
 # ページ設定
 # ==========================================
-st.set_page_config(page_title="松浪ミニバス分析 V64.2", layout="centered")
+st.set_page_config(page_title="松浪ミニバス分析 V64.3", layout="centered")
 
 # ★ここに実際のアプリのURLを入力してください★
 APP_URL = "https://your-app-url.streamlit.app" 
@@ -61,7 +61,7 @@ if 'read_only' not in st.session_state:
     st.session_state.read_only = False
 
 if 'room_key' not in st.session_state:
-    st.title("🏀 松浪ミニバス分析 V64.2")
+    st.title("🏀 松浪ミニバス分析 V64.3")
     st.info("💡 **使用者名** を入力してスタートしてください。")
     room_input = st.text_input("使用者名（例：〇〇父 など）")
     
@@ -1113,6 +1113,8 @@ def draw_season_tab():
                         'AVG': f"{(pts/games):.1f}" if games > 0 else "0.0", 
                         '+/-': f"{pm_val:+}",
                         'FG(M/A)': fmt_stat(m2i+m3i, m2a+m3a), 
+                        '3P(M/A)': fmt_stat(m3i, m3a),
+                        'FT(M/A)': fmt_stat(fi, fa),
                         'REB(D/O)': f"{drb+orb}\n({drb}/{orb})", 
                         'As': ast, 
                         'St': stl, 
@@ -1131,6 +1133,8 @@ def draw_season_tab():
                     'AVG': f"{(tp/len(dfs)):.1f}", 
                     '+/-': f"{total_pm:+}",
                     'FG(M/A)': fmt_stat(tm2i+tm3i, tm2a+tm3a), 
+                    '3P(M/A)': fmt_stat(tm3i, tm3a),
+                    'FT(M/A)': fmt_stat(tfi, tfa),
                     'REB(D/O)': f"{tdr+tor}\n({tdr}/{tor})", 
                     'As': tast, 
                     'St': tstl, 
