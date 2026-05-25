@@ -13,7 +13,7 @@ import urllib.parse
 # ==========================================
 # ページ設定
 # ==========================================
-st.set_page_config(page_title="松浪ミニバス分析 V63.1", layout="centered")
+st.set_page_config(page_title="松浪ミニバス分析 V63.2", layout="centered")
 
 # ★ここに実際のアプリのURLを入力してください★
 APP_URL = "https://your-app-url.streamlit.app" 
@@ -61,7 +61,7 @@ if 'read_only' not in st.session_state:
     st.session_state.read_only = False
 
 if 'room_key' not in st.session_state:
-    st.title("🏀 松浪ミニバス分析 V63.1")
+    st.title("🏀 松浪ミニバス分析 V63.2")
     st.info("💡 **使用者名** を入力してスタートしてください。")
     room_input = st.text_input("使用者名（例：〇〇父 など）")
     
@@ -871,7 +871,7 @@ def draw_report_body(df_history, home_name, away_name):
     
     st.divider()
 
-    # 4. アシスト・ホットライン解析 (NEW: 一つの表に統合・色分け)
+    # 4. アシスト・ホットライン解析 (総当たり星取表・全表示対応)
     st.header("4. 🤝 アシスト・ホットライン解析")
     st.write("「誰が、誰にパスを出してどんな得点に繋がったか」を視覚化します。色が濃いほど強力なコンビです！")
     
@@ -886,9 +886,7 @@ def draw_report_body(df_history, home_name, away_name):
             scorer_match = re.search(r'#(\d+)', str(ast_row['詳細']))
             scorer_p = scorer_match.group(1) if scorer_match else "不明"
             
-            # シュート種類の逆引き検索
             shot_str = "不明"
-            # 削除エラー対策の完全版: iloc[:-1] を使用
             past_shots = df_history.loc[:idx].iloc[:-1]
             shots_by_scorer = past_shots[(past_shots['チーム'] == ast_team) & 
                                          (past_shots['名前'] == f"{scorer_p}番") & 
@@ -909,7 +907,6 @@ def draw_report_body(df_history, home_name, away_name):
             
         ast_table = pd.DataFrame(ast_records)
         
-        # ① ヒートマップの描画（左右2列）
         hc1, hc2 = st.columns(2)
         for i, t_name in enumerate([home_name, away_name]):
             t_ast = ast_table[ast_table['チーム'] == t_name]
@@ -917,12 +914,17 @@ def draw_report_body(df_history, home_name, away_name):
             
             with col:
                 st.write(f"{'🔵' if i == 0 else '🔴'} **{t_name}**")
+                
+                # チームの全選手を#付きでリスト化
+                team_players = [f"#{p}" for p in (all_h if t_name == home_name else all_a)]
+                
                 if not t_ast.empty:
                     ast_counts = t_ast.groupby(['パサー', 'シューター']).size().reset_index(name='回数')
                     
+                    # scale(domain)で全選手を強制表示し、axisでlabelOverlap=Falseを指定して間引きを防ぐ
                     base = alt.Chart(ast_counts).encode(
-                        x=alt.X('シューター:N', title='シューター (決めた人)', axis=alt.Axis(labelAngle=0)),
-                        y=alt.Y('パサー:N', title='パサー (パスを出した人)')
+                        x=alt.X('シューター:N', title='シューター (決めた人)', scale=alt.Scale(domain=team_players), axis=alt.Axis(labelAngle=0, labelOverlap=False)),
+                        y=alt.Y('パサー:N', title='パサー (パスを出した人)', scale=alt.Scale(domain=team_players), axis=alt.Axis(labelOverlap=False))
                     )
                     
                     heatmap = base.mark_rect().encode(
@@ -938,11 +940,11 @@ def draw_report_body(df_history, home_name, away_name):
                         )
                     )
                     
-                    st.altair_chart((heatmap + text).properties(height=200), use_container_width=True)
+                    # 高さを300にして正方行列に近づける
+                    st.altair_chart((heatmap + text).properties(height=300), use_container_width=True)
                 else:
                     st.caption("アシスト記録なし")
                     
-        # ② チームカラーで色分けした1つの詳細リスト（表）を描画
         st.markdown(f"**📝 アシスト詳細リスト**")
         disp_df = ast_table[['チーム', 'Q', 'パサー', 'シューター', 'シュート種類']].copy()
         
@@ -1267,7 +1269,7 @@ def draw_season_tab():
                 
                 st.divider()
                 
-                # --- ③ シーズン累計：アシスト・ホットライン解析 ---
+                # --- ③ シーズン累計：アシスト・ホットライン解析 (総当たり全表示対応) ---
                 st.subheader("③ 🤝 アシスト・ホットライン解析 (シーズン累計)")
                 st.write(f"「誰が、誰にパスを出して得点に繋がったか」のシーズン累計です。色が濃いほど強力なコンビです！")
                 
@@ -1288,9 +1290,11 @@ def draw_season_tab():
                     ast_table_season = pd.DataFrame(ast_records_season)
                     ast_counts_season = ast_table_season.groupby(['パサー', 'シューター']).size().reset_index(name='回数')
                     
+                    team_players_season = [f"#{p}" for p in s_players]
+                    
                     base_s = alt.Chart(ast_counts_season).encode(
-                        x=alt.X('シューター:N', title='シューター (決めた人)', axis=alt.Axis(labelAngle=0)),
-                        y=alt.Y('パサー:N', title='パサー (パスを出した人)')
+                        x=alt.X('シューター:N', title='シューター (決めた人)', scale=alt.Scale(domain=team_players_season), axis=alt.Axis(labelAngle=0, labelOverlap=False)),
+                        y=alt.Y('パサー:N', title='パサー (パスを出した人)', scale=alt.Scale(domain=team_players_season), axis=alt.Axis(labelOverlap=False))
                     )
                     
                     heatmap_s = base_s.mark_rect().encode(
@@ -1306,7 +1310,7 @@ def draw_season_tab():
                         )
                     )
                     
-                    st.altair_chart((heatmap_s + text_s).properties(height=250), use_container_width=True)
+                    st.altair_chart((heatmap_s + text_s).properties(height=300), use_container_width=True)
                 else:
                     st.caption("アシスト記録がありません")
             else:
