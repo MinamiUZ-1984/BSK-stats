@@ -13,7 +13,7 @@ import urllib.parse
 # ==========================================
 # ページ設定
 # ==========================================
-st.set_page_config(page_title="松浪ミニバス分析 V63.0", layout="centered")
+st.set_page_config(page_title="松浪ミニバス分析 V63.1", layout="centered")
 
 # ★ここに実際のアプリのURLを入力してください★
 APP_URL = "https://your-app-url.streamlit.app" 
@@ -61,7 +61,7 @@ if 'read_only' not in st.session_state:
     st.session_state.read_only = False
 
 if 'room_key' not in st.session_state:
-    st.title("🏀 松浪ミニバス分析 V63.0")
+    st.title("🏀 松浪ミニバス分析 V63.1")
     st.info("💡 **使用者名** を入力してスタートしてください。")
     room_input = st.text_input("使用者名（例：〇〇父 など）")
     
@@ -886,8 +886,10 @@ def draw_report_body(df_history, home_name, away_name):
             scorer_match = re.search(r'#(\d+)', str(ast_row['詳細']))
             scorer_p = scorer_match.group(1) if scorer_match else "不明"
             
+            # シュート種類の逆引き検索
             shot_str = "不明"
-            past_shots = df_history.loc[:idx-1]
+            # 削除エラー対策の完全版: iloc[:-1] を使用
+            past_shots = df_history.loc[:idx].iloc[:-1]
             shots_by_scorer = past_shots[(past_shots['チーム'] == ast_team) & 
                                          (past_shots['名前'] == f"{scorer_p}番") & 
                                          (past_shots['結果'] == '成功') & 
@@ -1003,8 +1005,29 @@ def draw_season_tab():
             h_season_df = all_df[all_df['チーム'] == target_team]
             
             if not h_season_df.empty:
-                st.success(f"✅ {len(dfs)}試合分読込完了")
+                st.success(f"✅ {len(dfs)}試合分のデータを読み込みました！ (対象: **{target_team}**)")
+                
+                match_info = {}
+                wins, losses, draws = 0, 0, 0
+                for m_id in match_order:
+                    m_df = all_df[all_df['Match_ID'] == m_id]
+                    h_pts = m_df[m_df['チーム'] == target_team]['点数'].sum()
+                    a_pts = m_df[m_df['チーム'] != target_team]['点数'].sum()
+                    if h_pts > a_pts: 
+                        wl = '勝'
+                        wins += 1
+                    elif h_pts < a_pts: 
+                        wl = '負'
+                        losses += 1
+                    else: 
+                        wl = '分'
+                        draws += 1
+                    match_info[m_id] = {'勝敗': wl, 'スコア': f"{h_pts} - {a_pts}"}
+                
                 s_players = sorted([p.replace('番','') for p in h_season_df['名前'].unique() if p != 'TEAM'], key=safe_sort_key)
+                
+                st.subheader(f"① {target_team} チーム全体スタッツ")
+                st.markdown(f"##### 🏆 シーズン戦績: **{wins}勝 {losses}敗 {draws}分**")
                 
                 rows = []
                 tp = tm2i = tm2a = tm3i = tm3a = tfi = tfa = tor = tdr = tast = tstl = tblk = tdef = tf = tto = 0
