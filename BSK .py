@@ -13,7 +13,7 @@ import urllib.parse
 # ==========================================
 # ページ設定
 # ==========================================
-st.set_page_config(page_title="松浪ミニバス分析 V64.1", layout="centered")
+st.set_page_config(page_title="松浪ミニバス分析 V64.2", layout="centered")
 
 # ★ここに実際のアプリのURLを入力してください★
 APP_URL = "https://your-app-url.streamlit.app" 
@@ -61,7 +61,7 @@ if 'read_only' not in st.session_state:
     st.session_state.read_only = False
 
 if 'room_key' not in st.session_state:
-    st.title("🏀 松浪ミニバス分析 V64.1")
+    st.title("🏀 松浪ミニバス分析 V64.2")
     st.info("💡 **使用者名** を入力してスタートしてください。")
     room_input = st.text_input("使用者名（例：〇〇父 など）")
     
@@ -1535,7 +1535,7 @@ def draw_action_menu():
             
             for i, p in enumerate(active):
                 if p != player_num:
-                    if c[i].button(p, key=f"ast_{p}"):
+                    if c[i].button(p, key=f"ast_{p}", use_container_width=True):
                         record("AST", detail=f"to #{player_num}", team=team_name, name=f"{p}番")
                         safe_rerun()
                         
@@ -1551,7 +1551,7 @@ def draw_action_menu():
             st.caption(f"🔵 {st.session_state.home_name}")
             c_h = st.columns(len(st.session_state.act_h))
             for i, p in enumerate(st.session_state.act_h):
-                if c_h[i].button(p, key=f"rbh_{p}"):
+                if c_h[i].button(p, key=f"rbh_{p}", use_container_width=True):
                     reb_type = "OR" if team_name == st.session_state.home_name else "DR"
                     record(reb_type, team=st.session_state.home_name, name=f"{p}番")
                     safe_rerun()
@@ -1559,7 +1559,7 @@ def draw_action_menu():
             st.caption(f"🔴 {st.session_state.away_name}")
             c_a = st.columns(len(st.session_state.act_a))
             for i, p in enumerate(st.session_state.act_a):
-                if c_a[i].button(p, key=f"rba_{p}"):
+                if c_a[i].button(p, key=f"rba_{p}", use_container_width=True):
                     reb_type = "OR" if team_name != st.session_state.home_name else "DR"
                     record(reb_type, team=st.session_state.away_name, name=f"{p}番")
                     safe_rerun()
