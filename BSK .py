@@ -13,7 +13,7 @@ import urllib.parse
 # ==========================================
 # ページ設定
 # ==========================================
-st.set_page_config(page_title="松浪ミニバス分析 V63.3", layout="centered")
+st.set_page_config(page_title="松浪ミニバス分析 V64.0", layout="centered")
 
 # ★ここに実際のアプリのURLを入力してください★
 APP_URL = "https://your-app-url.streamlit.app" 
@@ -61,7 +61,7 @@ if 'read_only' not in st.session_state:
     st.session_state.read_only = False
 
 if 'room_key' not in st.session_state:
-    st.title("🏀 松浪ミニバス分析 V63.3")
+    st.title("🏀 松浪ミニバス分析 V64.0")
     st.info("💡 **使用者名** を入力してスタートしてください。")
     room_input = st.text_input("使用者名（例：〇〇父 など）")
     
@@ -871,13 +871,70 @@ def draw_report_body(df_history, home_name, away_name):
     
     st.divider()
 
-    # 4. アシスト・ホットライン解析 (総当たり星取表・枠線つき全表示対応)
+    # 4. アシスト・ホットライン解析 (枠線つき・総当たり全表示対応)
     st.header("4. 🤝 アシスト・ホットライン解析")
     st.write("「誰が、誰にパスを出してどんな得点に繋がったか」を視覚化します。色が濃いほど強力なコンビです！")
     
     ast_df = df_history[df_history['項目'] == 'AST']
+    
+    hc1, hc2 = st.columns(2)
+    for i, t_name in enumerate([home_name, away_name]):
+        col = hc1 if i == 0 else hc2
+        with col:
+            st.write(f"{'🔵' if i == 0 else '🔴'} **{t_name}**")
+            
+            # 全選手の組み合わせ（星取表の土台）を作成
+            team_players = [f"#{p}" for p in (all_h if t_name == home_name else all_a)]
+            full_grid = pd.DataFrame([(p, s) for p in team_players for s in team_players], columns=['パサー', 'シューター'])
+            
+            t_ast = pd.DataFrame()
+            if not ast_df.empty:
+                ast_records = []
+                for idx, ast_row in ast_df[ast_df['チーム'] == t_name].iterrows():
+                    ast_p = str(ast_row['名前']).replace('番', '')
+                    scorer_match = re.search(r'#(\d+)', str(ast_row['詳細']))
+                    scorer_p = scorer_match.group(1) if scorer_match else "不明"
+                    ast_records.append({'パサー': f"#{ast_p}", 'シューター': f"#{scorer_p}"})
+                t_ast = pd.DataFrame(ast_records)
+                
+            if not t_ast.empty:
+                ast_counts = t_ast.groupby(['パサー', 'シューター']).size().reset_index(name='回数')
+                full_grid = pd.merge(full_grid, ast_counts, on=['パサー', 'シューター'], how='left').fillna({'回数': 0})
+            else:
+                full_grid['回数'] = 0
+                
+            base = alt.Chart(full_grid).encode(
+                x=alt.X('シューター:N', title='シューター (決めた人)', scale=alt.Scale(domain=team_players), axis=alt.Axis(labelAngle=0, labelOverlap=False)),
+                y=alt.Y('パサー:N', title='パサー (パスを出した人)', scale=alt.Scale(domain=team_players), axis=alt.Axis(labelOverlap=False))
+            )
+            
+            # 枠線をつけて、回数が0の場合は透明（白っぽく）する
+            heatmap = base.mark_rect(stroke='lightgray', strokeWidth=1).encode(
+                color=alt.condition(
+                    alt.datum.回数 > 0,
+                    alt.Color('回数:Q', scale=alt.Scale(scheme='blues' if i == 0 else 'reds'), legend=None),
+                    alt.value('transparent')
+                )
+            )
+            
+            max_count = full_grid['回数'].max()
+            threshold = max_count / 2 if max_count > 0 else 0
+            
+            # 回数が0の場合は数字を出さない（空欄にする）
+            text = base.mark_text(baseline='middle').encode(
+                text=alt.condition(alt.datum.回数 > 0, alt.Text('回数:Q'), alt.value('')),
+                color=alt.condition(
+                    alt.datum.回数 > threshold, 
+                    alt.value('white'), 
+                    alt.value('black')
+                )
+            )
+            
+            st.altair_chart((heatmap + text).properties(height=300), use_container_width=True)
+                
     if not ast_df.empty:
-        ast_records = []
+        # アシスト詳細リストのデータ作成
+        ast_details = []
         for idx, ast_row in ast_df.iterrows():
             ast_p = str(ast_row['名前']).replace('番', '')
             ast_team = ast_row['チーム']
@@ -897,7 +954,7 @@ def draw_report_body(df_history, home_name, away_name):
                 last_shot = shots_by_scorer.iloc[-1]
                 shot_str = f"{last_shot['項目']} ({last_shot['詳細']})"
                 
-            ast_records.append({
+            ast_details.append({
                 'チーム': ast_team, 
                 'Q': q,
                 'パサー': f"#{ast_p}", 
@@ -905,46 +962,10 @@ def draw_report_body(df_history, home_name, away_name):
                 'シュート種類': shot_str
             })
             
-        ast_table = pd.DataFrame(ast_records)
+        ast_table_details = pd.DataFrame(ast_details)
         
-        hc1, hc2 = st.columns(2)
-        for i, t_name in enumerate([home_name, away_name]):
-            t_ast = ast_table[ast_table['チーム'] == t_name]
-            col = hc1 if i == 0 else hc2
-            
-            with col:
-                st.write(f"{'🔵' if i == 0 else '🔴'} **{t_name}**")
-                
-                team_players = [f"#{p}" for p in (all_h if t_name == home_name else all_a)]
-                
-                if not t_ast.empty:
-                    ast_counts = t_ast.groupby(['パサー', 'シューター']).size().reset_index(name='回数')
-                    
-                    base = alt.Chart(ast_counts).encode(
-                        x=alt.X('シューター:N', title='シューター (決めた人)', scale=alt.Scale(domain=team_players), axis=alt.Axis(labelAngle=0, labelOverlap=False)),
-                        y=alt.Y('パサー:N', title='パサー (パスを出した人)', scale=alt.Scale(domain=team_players), axis=alt.Axis(labelOverlap=False))
-                    )
-                    
-                    # 枠線（stroke='lightgray', strokeWidth=1）を追加してマス目をハッキリさせる
-                    heatmap = base.mark_rect(stroke='lightgray', strokeWidth=1).encode(
-                        color=alt.Color('回数:Q', scale=alt.Scale(scheme='blues' if i == 0 else 'reds'), legend=None)
-                    )
-                    
-                    text = base.mark_text(baseline='middle').encode(
-                        text='回数:Q',
-                        color=alt.condition(
-                            alt.datum.回数 > ast_counts['回数'].max() / 2, 
-                            alt.value('white'), 
-                            alt.value('black')
-                        )
-                    )
-                    
-                    st.altair_chart((heatmap + text).properties(height=300), use_container_width=True)
-                else:
-                    st.caption("アシスト記録なし")
-                    
         st.markdown(f"**📝 アシスト詳細リスト**")
-        disp_df = ast_table[['チーム', 'Q', 'パサー', 'シューター', 'シュート種類']].copy()
+        disp_df = ast_table_details[['チーム', 'Q', 'パサー', 'シューター', 'シュート種類']].copy()
         
         def color_bg(row):
             if row['チーム'] == home_name:
@@ -957,7 +978,7 @@ def draw_report_body(df_history, home_name, away_name):
         st.dataframe(styled_df, hide_index=True, use_container_width=True)
                     
     else:
-        st.caption("アシスト記録がありません")
+        st.caption("詳細リストはありません")
         
     st.divider()
 
@@ -1272,6 +1293,11 @@ def draw_season_tab():
                 st.write(f"「誰が、誰にパスを出して得点に繋がったか」のシーズン累計です。色が濃いほど強力なコンビです！")
                 
                 ast_df_season = all_df[(all_df['項目'] == 'AST') & (all_df['チーム'] == target_team)]
+                
+                # 全選手の組み合わせ（星取表の土台）を作成
+                team_players_season = [f"#{p}" for p in s_players]
+                full_grid_s = pd.DataFrame([(p, s) for p in team_players_season for s in team_players_season], columns=['パサー', 'シューター'])
+                
                 if not ast_df_season.empty:
                     ast_records_season = []
                     for idx, ast_row in ast_df_season.iterrows():
@@ -1288,30 +1314,39 @@ def draw_season_tab():
                     ast_table_season = pd.DataFrame(ast_records_season)
                     ast_counts_season = ast_table_season.groupby(['パサー', 'シューター']).size().reset_index(name='回数')
                     
-                    team_players_season = [f"#{p}" for p in s_players]
-                    
-                    base_s = alt.Chart(ast_counts_season).encode(
-                        x=alt.X('シューター:N', title='シューター (決めた人)', scale=alt.Scale(domain=team_players_season), axis=alt.Axis(labelAngle=0, labelOverlap=False)),
-                        y=alt.Y('パサー:N', title='パサー (パスを出した人)', scale=alt.Scale(domain=team_players_season), axis=alt.Axis(labelOverlap=False))
-                    )
-                    
-                    # 枠線（stroke='lightgray', strokeWidth=1）を追加
-                    heatmap_s = base_s.mark_rect(stroke='lightgray', strokeWidth=1).encode(
-                        color=alt.Color('回数:Q', scale=alt.Scale(scheme='blues'), legend=None)
-                    )
-                    
-                    text_s = base_s.mark_text(baseline='middle').encode(
-                        text='回数:Q',
-                        color=alt.condition(
-                            alt.datum.回数 > ast_counts_season['回数'].max() / 2, 
-                            alt.value('white'), 
-                            alt.value('black')
-                        )
-                    )
-                    
-                    st.altair_chart((heatmap_s + text_s).properties(height=300), use_container_width=True)
+                    full_grid_s = pd.merge(full_grid_s, ast_counts_season, on=['パサー', 'シューター'], how='left').fillna({'回数': 0})
                 else:
-                    st.caption("アシスト記録がありません")
+                    full_grid_s['回数'] = 0
+                    
+                base_s = alt.Chart(full_grid_s).encode(
+                    x=alt.X('シューター:N', title='シューター (決めた人)', scale=alt.Scale(domain=team_players_season), axis=alt.Axis(labelAngle=0, labelOverlap=False)),
+                    y=alt.Y('パサー:N', title='パサー (パスを出した人)', scale=alt.Scale(domain=team_players_season), axis=alt.Axis(labelOverlap=False))
+                )
+                
+                # 枠線をつけて、回数が0の場合は透明（白っぽく）する
+                heatmap_s = base_s.mark_rect(stroke='lightgray', strokeWidth=1).encode(
+                    color=alt.condition(
+                        alt.datum.回数 > 0,
+                        alt.Color('回数:Q', scale=alt.Scale(scheme='blues'), legend=None),
+                        alt.value('transparent')
+                    )
+                )
+                
+                max_count_s = full_grid_s['回数'].max()
+                threshold_s = max_count_s / 2 if max_count_s > 0 else 0
+                
+                # 回数が0の場合は数字を出さない（空欄にする）
+                text_s = base_s.mark_text(baseline='middle').encode(
+                    text=alt.condition(alt.datum.回数 > 0, alt.Text('回数:Q'), alt.value('')),
+                    color=alt.condition(
+                        alt.datum.回数 > threshold_s, 
+                        alt.value('white'), 
+                        alt.value('black')
+                    )
+                )
+                
+                st.altair_chart((heatmap_s + text_s).properties(height=300), use_container_width=True)
+
             else:
                 st.warning(f"アップロードされたファイルに「{target_team}」のデータが見つかりません。上の入力欄の名前を確認してください。")
 
