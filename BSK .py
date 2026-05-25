@@ -13,7 +13,7 @@ import urllib.parse
 # ==========================================
 # ページ設定
 # ==========================================
-st.set_page_config(page_title="松浪ミニバス分析 V62.1", layout="centered")
+st.set_page_config(page_title="松浪ミニバス分析 V62.2", layout="centered")
 
 # ★ここに実際のアプリのURLを入力してください★
 APP_URL = "https://your-app-url.streamlit.app" 
@@ -61,7 +61,7 @@ if 'read_only' not in st.session_state:
     st.session_state.read_only = False
 
 if 'room_key' not in st.session_state:
-    st.title("🏀 松浪ミニバス分析 V62.1")
+    st.title("🏀 松浪ミニバス分析 V62.2")
     st.info("💡 **使用者名** を入力してスタートしてください。")
     room_input = st.text_input("使用者名（例：〇〇父 など）")
     
@@ -609,7 +609,7 @@ def generate_coach_advice(df, home_name, away_name):
     return html
 
 # ==========================================
-# 1試合レポート・ライブレポート描画本体
+# 1試合レポート描画本体
 # ==========================================
 def draw_report_body(df_history, home_name, away_name):
     # 1. スコア推移
@@ -871,9 +871,9 @@ def draw_report_body(df_history, home_name, away_name):
     
     st.divider()
 
-    # 4. アシスト・ホットライン解析
+    # 4. アシスト・ホットライン解析 (NEW: 表と色分け追加)
     st.header("4. 🤝 アシスト・ホットライン解析")
-    st.write("「誰が、誰にパスを出して得点に繋がったか」を視覚化します。色が濃いほど強力なコンビです！")
+    st.write("「誰が、誰にパスを出してどんな得点に繋がったか」を視覚化します。色が濃いほど強力なコンビです！")
     
     ast_df = df_history[df_history['項目'] == 'AST']
     if not ast_df.empty:
@@ -881,14 +881,29 @@ def draw_report_body(df_history, home_name, away_name):
         for idx, ast_row in ast_df.iterrows():
             ast_p = str(ast_row['名前']).replace('番', '')
             ast_team = ast_row['チーム']
+            q = ast_row['Q']
             
             scorer_match = re.search(r'#(\d+)', str(ast_row['詳細']))
             scorer_p = scorer_match.group(1) if scorer_match else "不明"
             
+            # シュート種類の逆引き検索
+            shot_str = "不明"
+            past_shots = df_history.loc[:idx-1]
+            shots_by_scorer = past_shots[(past_shots['チーム'] == ast_team) & 
+                                         (past_shots['名前'] == f"{scorer_p}番") & 
+                                         (past_shots['結果'] == '成功') & 
+                                         (past_shots['項目'].isin(['2P', '3P']))]
+            
+            if not shots_by_scorer.empty:
+                last_shot = shots_by_scorer.iloc[-1]
+                shot_str = f"{last_shot['項目']} ({last_shot['詳細']})"
+                
             ast_records.append({
                 'チーム': ast_team, 
+                'Q': q,
                 'パサー': f"#{ast_p}", 
-                'シューター': f"#{scorer_p}"
+                'シューター': f"#{scorer_p}",
+                'シュート種類': shot_str
             })
             
         ast_table = pd.DataFrame(ast_records)
@@ -901,11 +916,12 @@ def draw_report_body(df_history, home_name, away_name):
             with col:
                 st.write(f"{'🔵' if i == 0 else '🔴'} **{t_name}**")
                 if not t_ast.empty:
+                    # ① ヒートマップの描画
                     ast_counts = t_ast.groupby(['パサー', 'シューター']).size().reset_index(name='回数')
                     
                     base = alt.Chart(ast_counts).encode(
-                        x=alt.X('シューター:N', title='シューター', axis=alt.Axis(labelAngle=0)),
-                        y=alt.Y('パサー:N', title='パサー')
+                        x=alt.X('シューター:N', title='シューター (決めた人)', axis=alt.Axis(labelAngle=0)),
+                        y=alt.Y('パサー:N', title='パサー (パスを出した人)')
                     )
                     
                     heatmap = base.mark_rect().encode(
@@ -922,6 +938,20 @@ def draw_report_body(df_history, home_name, away_name):
                     )
                     
                     st.altair_chart((heatmap + text).properties(height=200), use_container_width=True)
+                    
+                    # ② 詳細リスト（表）の描画と色分け
+                    st.markdown(f"**📝 アシスト詳細リスト**")
+                    disp_df = t_ast[['Q', 'パサー', 'シューター', 'シュート種類']].copy()
+                    
+                    # Pandas Stylerを使ってチームカラーで背景色を設定
+                    bg_color = '#e6f2ff' if i == 0 else '#ffe6e6' # 薄い青 または 薄い赤
+                    
+                    def color_bg(row):
+                        return [f'background-color: {bg_color}'] * len(row)
+                        
+                    styled_df = disp_df.style.apply(color_bg, axis=1)
+                    st.dataframe(styled_df, hide_index=True, use_container_width=True)
+                    
                 else:
                     st.caption("アシスト記録なし")
     else:
