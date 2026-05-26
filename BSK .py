@@ -13,7 +13,7 @@ import urllib.parse
 # ==========================================
 # ページ設定
 # ==========================================
-st.set_page_config(page_title="松浪ミニバス分析 V66.1", layout="centered")
+st.set_page_config(page_title="松浪ミニバス分析 V67.0", layout="centered")
 
 # ★ここに実際のアプリのURLを入力してください★
 APP_URL = "https://your-app-url.streamlit.app" 
@@ -61,7 +61,7 @@ if 'read_only' not in st.session_state:
     st.session_state.read_only = False
 
 if 'room_key' not in st.session_state:
-    st.title("🏀 松浪ミニバス分析 V66.1")
+    st.title("🏀 松浪ミニバス分析 V67.0")
     st.info("💡 **使用者名** を入力してスタートしてください。")
     room_input = st.text_input("使用者名（例：〇〇父 など）")
     
@@ -1251,14 +1251,21 @@ def draw_season_tab():
                 st.divider()
                 
                 st.subheader("② 個人スタッツ ＆ 分析グラフ")
-                target_scope = st.selectbox("分析対象（チーム全体・個人）を選択してください", ["チーム全体"] + s_players)
+                
+                # --- NEW: 分析対象とQ選択を並べて配置 ---
+                col_scope, col_q = st.columns(2)
+                target_scope = col_scope.selectbox("🔍 分析対象（チーム全体・個人）", ["チーム全体"] + s_players)
+                season_target_q = col_q.selectbox("⏱️ 対象クォーター", ["Total", "1Q", "2Q", "3Q", "4Q", "OT"])
                 
                 if target_scope == "チーム全体":
-                    target_df = h_season_df
+                    target_df = h_season_df.copy()
                 else:
-                    target_df = h_season_df[h_season_df['名前'] == f"{target_scope}番"]
+                    target_df = h_season_df[h_season_df['名前'] == f"{target_scope}番"].copy()
                     
-                st.markdown(f"##### 📅 時系列スタッツ表 ({target_scope})")
+                if season_target_q != "Total":
+                    target_df = target_df[target_df['Q'] == season_target_q]
+                    
+                st.markdown(f"##### 📅 時系列スタッツ表 ({target_scope} / {season_target_q})")
                 ts_rows = []
                 def fmt_stat_inline(m, a):
                     return f"{m}/{a} ({(m/a*100):.0f}%)" if a > 0 else "-"
@@ -1309,6 +1316,9 @@ def draw_season_tab():
                     layup_a = len(layup)
                     
                     match_full_df = all_df[all_df['Match_ID'] == match_id]
+                    if season_target_q != "Total":
+                        match_full_df = match_full_df[match_full_df['Q'] == season_target_q]
+                        
                     if target_scope != "チーム全体":
                         pm_match = calculate_pm(target_scope, target_team, match_full_df)
                     else:
@@ -1419,11 +1429,9 @@ def draw_season_tab():
                         
                     ast_table_season = pd.DataFrame(ast_records_season)
                     
-                    # 関係のある選手（パサーかシューター）だけを抽出し、背番号順に並べ替え
                     involved_raw_s = set(ast_table_season['パサー']).union(set(ast_table_season['シューター']))
                     involved_players_s = sorted(list(involved_raw_s), key=safe_sort_key)
                     
-                    # 関係のある選手だけでマトリックス（星取表の土台）を作成
                     full_grid_s = pd.DataFrame([(p, s) for p in involved_players_s for s in involved_players_s], columns=['パサー', 'シューター'])
                     
                     ast_counts_season = ast_table_season.groupby(['パサー', 'シューター']).size().reset_index(name='回数')
@@ -1434,7 +1442,6 @@ def draw_season_tab():
                         y=alt.Y('パサー:N', title='パサー (パスを出した人)', scale=alt.Scale(domain=involved_players_s), axis=alt.Axis(labelOverlap=False))
                     )
                     
-                    # 枠線をつけて、回数が0の場合は透明（白っぽく）する
                     heatmap_s = base_s.mark_rect(stroke='lightgray', strokeWidth=1).encode(
                         color=alt.condition(
                             alt.datum.回数 > 0,
@@ -1446,7 +1453,6 @@ def draw_season_tab():
                     max_count_s = full_grid_s['回数'].max()
                     threshold_s = max_count_s / 2 if max_count_s > 0 else 0
                     
-                    # 回数が0の場合は数字を出さない（空欄にする）
                     text_s = base_s.mark_text(baseline='middle').encode(
                         text=alt.condition(alt.datum.回数 > 0, alt.Text('回数:Q'), alt.value('')),
                         color=alt.condition(
@@ -1456,7 +1462,6 @@ def draw_season_tab():
                         )
                     )
                     
-                    # 人数に合わせて高さを動的に調整
                     chart_height_s = max(200, len(involved_players_s) * 30 + 50)
                     st.altair_chart((heatmap_s + text_s).properties(height=chart_height_s), use_container_width=True)
 
