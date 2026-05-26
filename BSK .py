@@ -13,7 +13,7 @@ import urllib.parse
 # ==========================================
 # ページ設定
 # ==========================================
-st.set_page_config(page_title="松浪ミニバス分析 V66.0", layout="centered")
+st.set_page_config(page_title="松浪ミニバス分析 V66.1", layout="centered")
 
 # ★ここに実際のアプリのURLを入力してください★
 APP_URL = "https://your-app-url.streamlit.app" 
@@ -61,7 +61,7 @@ if 'read_only' not in st.session_state:
     st.session_state.read_only = False
 
 if 'room_key' not in st.session_state:
-    st.title("🏀 松浪ミニバス分析 V66.0")
+    st.title("🏀 松浪ミニバス分析 V66.1")
     st.info("💡 **使用者名** を入力してスタートしてください。")
     room_input = st.text_input("使用者名（例：〇〇父 など）")
     
@@ -611,30 +611,47 @@ def generate_coach_advice(df, home_name, away_name):
 # ==========================================
 # ローテーション（出場Q）計算関数
 # ==========================================
-def get_rotation_table(df_hist, p_list):
+def get_rotation_table(df_hist, p_list, team_name, is_home):
     q_cols = ["1Q", "2Q", "3Q", "4Q", "OT"]
     rows = []
     for p in p_list:
         row_data = {'#': p}
+        pn = f"{p}番"
+        ast_tag = f"#{p}"
         for q in q_cols:
             q_df = df_hist[df_hist['Q'] == q]
             if q_df.empty:
                 row_data[q] = "-"
                 continue
             
-            # そのQでオンコートに名前があったかチェック
-            on_court_str = ",".join(q_df['オンコートH'].dropna().astype(str)) + "," + ",".join(q_df['オンコートA'].dropna().astype(str))
+            # 1. オンコート情報から探す
+            onc_col = 'オンコートH' if is_home else 'オンコートA'
+            if onc_col in q_df.columns:
+                on_court_str = ",".join(q_df[onc_col].dropna().astype(str))
+            else:
+                on_court_str = ""
             on_court_set = set([x.strip() for x in on_court_str.split(",") if x.strip()])
             
-            row_data[q] = "〇" if p in on_court_set else "-"
+            # 2. 自分のプレイ記録から探す
+            played_events = q_df[(q_df['チーム'] == team_name) & (q_df['名前'] == pn)]
+            
+            # 3. アシストの受け手として記録されているか探す
+            ast_events = q_df[(q_df['チーム'] == team_name) & (q_df['項目'] == 'AST') & (q_df['詳細'].astype(str).str.contains(ast_tag, na=False))]
+            
+            if (p in on_court_set) or (not played_events.empty) or (not ast_events.empty):
+                row_data[q] = "〇"
+            else:
+                row_data[q] = "-"
         rows.append(row_data)
     return pd.DataFrame(rows)
 
-def get_season_rotation_table(df_hist, p_list):
+def get_season_rotation_table(df_hist, p_list, team_name):
     q_cols = ["1Q", "2Q", "3Q", "4Q", "OT"]
     rows = []
     for p in p_list:
         row_data = {'#': p}
+        pn = f"{p}番"
+        ast_tag = f"#{p}"
         for q in q_cols:
             q_df = df_hist[df_hist['Q'] == q]
             if q_df.empty:
@@ -643,10 +660,15 @@ def get_season_rotation_table(df_hist, p_list):
             
             matches_played_in_q = 0
             for m_id, m_df in q_df.groupby('Match_ID'):
-                on_court_str = ",".join(m_df['オンコートH'].dropna().astype(str)) + "," + ",".join(m_df['オンコートA'].dropna().astype(str))
+                on_court_str = ",".join(m_df.get('オンコートH', pd.Series()).dropna().astype(str)) + "," + ",".join(m_df.get('オンコートA', pd.Series()).dropna().astype(str))
                 on_court_set = set([x.strip() for x in on_court_str.split(",") if x.strip()])
-                if p in on_court_set:
+                
+                played_events = m_df[(m_df['チーム'] == team_name) & (m_df['名前'] == pn)]
+                ast_events = m_df[(m_df['チーム'] == team_name) & (m_df['項目'] == 'AST') & (m_df['詳細'].astype(str).str.contains(ast_tag, na=False))]
+                
+                if (p in on_court_set) or (not played_events.empty) or (not ast_events.empty):
                     matches_played_in_q += 1
+            
             row_data[q] = matches_played_in_q
         
         row_data['Total'] = sum([row_data[q] for q in q_cols])
@@ -930,11 +952,12 @@ def draw_report_body(df_history, home_name, away_name):
     
     st.divider()
     
-    # --- NEW: 🏃 出場クォーター（ローテーション）早見表 ---
+    # --- 🏃 出場クォーター（ローテーション）早見表 ---
     st.markdown("##### 🏃 出場クォーター (ローテーション) 表")
+    st.caption("※オンコート記録、または何らかのプレイ・アシストの記録があれば「〇」がつきます。")
     
-    rot_h = get_rotation_table(df_history, all_h)
-    rot_a = get_rotation_table(df_history, all_a)
+    rot_h = get_rotation_table(df_history, all_h, home_name, is_home=True)
+    rot_a = get_rotation_table(df_history, all_a, away_name, is_home=False)
     
     rc1, rc2 = st.columns(2)
     with rc1:
@@ -1217,11 +1240,11 @@ def draw_season_tab():
                 
                 st.dataframe(pd.DataFrame(rows).set_index('#'), use_container_width=True)
                 
-                # --- NEW: 🏃 出場クォーター数 (累計) ---
+                # --- 🏃 出場クォーター数 (累計) ---
                 st.markdown("##### 🏃 出場クォーター数 (累計)")
-                st.caption("※ 各クォーターに何試合出場したかを表示します。")
+                st.caption("※ 各クォーターに何試合出場したかを表示します。（オンコート記録またはプレイ記録で判定）")
                 
-                rot_season = get_season_rotation_table(all_df, s_players)
+                rot_season = get_season_rotation_table(all_df, s_players, target_team)
                 styled_rot_season = rot_season.style.map(color_season_rot, subset=["1Q", "2Q", "3Q", "4Q", "OT"]) if hasattr(rot_season.style, 'map') else rot_season.style.applymap(color_season_rot, subset=["1Q", "2Q", "3Q", "4Q", "OT"])
                 st.dataframe(styled_rot_season, hide_index=True, use_container_width=True)
                 
@@ -1396,9 +1419,11 @@ def draw_season_tab():
                         
                     ast_table_season = pd.DataFrame(ast_records_season)
                     
+                    # 関係のある選手（パサーかシューター）だけを抽出し、背番号順に並べ替え
                     involved_raw_s = set(ast_table_season['パサー']).union(set(ast_table_season['シューター']))
                     involved_players_s = sorted(list(involved_raw_s), key=safe_sort_key)
                     
+                    # 関係のある選手だけでマトリックス（星取表の土台）を作成
                     full_grid_s = pd.DataFrame([(p, s) for p in involved_players_s for s in involved_players_s], columns=['パサー', 'シューター'])
                     
                     ast_counts_season = ast_table_season.groupby(['パサー', 'シューター']).size().reset_index(name='回数')
@@ -1409,6 +1434,7 @@ def draw_season_tab():
                         y=alt.Y('パサー:N', title='パサー (パスを出した人)', scale=alt.Scale(domain=involved_players_s), axis=alt.Axis(labelOverlap=False))
                     )
                     
+                    # 枠線をつけて、回数が0の場合は透明（白っぽく）する
                     heatmap_s = base_s.mark_rect(stroke='lightgray', strokeWidth=1).encode(
                         color=alt.condition(
                             alt.datum.回数 > 0,
@@ -1420,6 +1446,7 @@ def draw_season_tab():
                     max_count_s = full_grid_s['回数'].max()
                     threshold_s = max_count_s / 2 if max_count_s > 0 else 0
                     
+                    # 回数が0の場合は数字を出さない（空欄にする）
                     text_s = base_s.mark_text(baseline='middle').encode(
                         text=alt.condition(alt.datum.回数 > 0, alt.Text('回数:Q'), alt.value('')),
                         color=alt.condition(
@@ -1429,6 +1456,7 @@ def draw_season_tab():
                         )
                     )
                     
+                    # 人数に合わせて高さを動的に調整
                     chart_height_s = max(200, len(involved_players_s) * 30 + 50)
                     st.altair_chart((heatmap_s + text_s).properties(height=chart_height_s), use_container_width=True)
 
