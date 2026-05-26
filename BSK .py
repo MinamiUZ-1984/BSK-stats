@@ -13,7 +13,7 @@ import urllib.parse
 # ==========================================
 # ページ設定
 # ==========================================
-st.set_page_config(page_title="松浪ミニバス分析 V65.0", layout="centered")
+st.set_page_config(page_title="松浪ミニバス分析 V66.0", layout="centered")
 
 # ★ここに実際のアプリのURLを入力してください★
 APP_URL = "https://your-app-url.streamlit.app" 
@@ -61,7 +61,7 @@ if 'read_only' not in st.session_state:
     st.session_state.read_only = False
 
 if 'room_key' not in st.session_state:
-    st.title("🏀 松浪ミニバス分析 V65.0")
+    st.title("🏀 松浪ミニバス分析 V66.0")
     st.info("💡 **使用者名** を入力してスタートしてください。")
     room_input = st.text_input("使用者名（例：〇〇父 など）")
     
@@ -609,6 +609,65 @@ def generate_coach_advice(df, home_name, away_name):
     return html
 
 # ==========================================
+# ローテーション（出場Q）計算関数
+# ==========================================
+def get_rotation_table(df_hist, p_list):
+    q_cols = ["1Q", "2Q", "3Q", "4Q", "OT"]
+    rows = []
+    for p in p_list:
+        row_data = {'#': p}
+        for q in q_cols:
+            q_df = df_hist[df_hist['Q'] == q]
+            if q_df.empty:
+                row_data[q] = "-"
+                continue
+            
+            # そのQでオンコートに名前があったかチェック
+            on_court_str = ",".join(q_df['オンコートH'].dropna().astype(str)) + "," + ",".join(q_df['オンコートA'].dropna().astype(str))
+            on_court_set = set([x.strip() for x in on_court_str.split(",") if x.strip()])
+            
+            row_data[q] = "〇" if p in on_court_set else "-"
+        rows.append(row_data)
+    return pd.DataFrame(rows)
+
+def get_season_rotation_table(df_hist, p_list):
+    q_cols = ["1Q", "2Q", "3Q", "4Q", "OT"]
+    rows = []
+    for p in p_list:
+        row_data = {'#': p}
+        for q in q_cols:
+            q_df = df_hist[df_hist['Q'] == q]
+            if q_df.empty:
+                row_data[q] = 0
+                continue
+            
+            matches_played_in_q = 0
+            for m_id, m_df in q_df.groupby('Match_ID'):
+                on_court_str = ",".join(m_df['オンコートH'].dropna().astype(str)) + "," + ",".join(m_df['オンコートA'].dropna().astype(str))
+                on_court_set = set([x.strip() for x in on_court_str.split(",") if x.strip()])
+                if p in on_court_set:
+                    matches_played_in_q += 1
+            row_data[q] = matches_played_in_q
+        
+        row_data['Total'] = sum([row_data[q] for q in q_cols])
+        rows.append(row_data)
+    return pd.DataFrame(rows)
+
+# スタイリング適用関数
+def color_q(val, is_home):
+    if val == '〇':
+        return 'background-color: #e6f2ff; color: #2980b9; font-weight: bold;' if is_home else 'background-color: #ffe6e6; color: #c0392b; font-weight: bold;'
+    return 'color: #ccc;'
+
+def color_season_rot(val):
+    try:
+        if int(val) > 0:
+            return 'background-color: #e6f2ff; font-weight: bold; color: #2980b9;'
+        return 'color: #ccc;'
+    except:
+        return ''
+
+# ==========================================
 # 1試合レポート描画本体
 # ==========================================
 def draw_report_body(df_history, home_name, away_name):
@@ -869,6 +928,24 @@ def draw_report_body(df_history, home_name, away_name):
     st.write(f"🔴 **{away_name}**")
     st.table(get_full_stats(away_name, all_a).drop(columns='Team').set_index('#'))
     
+    st.divider()
+    
+    # --- NEW: 🏃 出場クォーター（ローテーション）早見表 ---
+    st.markdown("##### 🏃 出場クォーター (ローテーション) 表")
+    
+    rot_h = get_rotation_table(df_history, all_h)
+    rot_a = get_rotation_table(df_history, all_a)
+    
+    rc1, rc2 = st.columns(2)
+    with rc1:
+        st.write(f"🔵 **{home_name}**")
+        styled_rot_h = rot_h.style.map(lambda x: color_q(x, True), subset=["1Q", "2Q", "3Q", "4Q", "OT"]) if hasattr(rot_h.style, 'map') else rot_h.style.applymap(lambda x: color_q(x, True), subset=["1Q", "2Q", "3Q", "4Q", "OT"])
+        st.dataframe(styled_rot_h, hide_index=True, use_container_width=True)
+    with rc2:
+        st.write(f"🔴 **{away_name}**")
+        styled_rot_a = rot_a.style.map(lambda x: color_q(x, False), subset=["1Q", "2Q", "3Q", "4Q", "OT"]) if hasattr(rot_a.style, 'map') else rot_a.style.applymap(lambda x: color_q(x, False), subset=["1Q", "2Q", "3Q", "4Q", "OT"])
+        st.dataframe(styled_rot_a, hide_index=True, use_container_width=True)
+
     st.divider()
 
     # 4. アシスト・ホットライン解析 (関係者のみ・枠線つき版)
@@ -1140,6 +1217,14 @@ def draw_season_tab():
                 
                 st.dataframe(pd.DataFrame(rows).set_index('#'), use_container_width=True)
                 
+                # --- NEW: 🏃 出場クォーター数 (累計) ---
+                st.markdown("##### 🏃 出場クォーター数 (累計)")
+                st.caption("※ 各クォーターに何試合出場したかを表示します。")
+                
+                rot_season = get_season_rotation_table(all_df, s_players)
+                styled_rot_season = rot_season.style.map(color_season_rot, subset=["1Q", "2Q", "3Q", "4Q", "OT"]) if hasattr(rot_season.style, 'map') else rot_season.style.applymap(color_season_rot, subset=["1Q", "2Q", "3Q", "4Q", "OT"])
+                st.dataframe(styled_rot_season, hide_index=True, use_container_width=True)
+                
                 st.divider()
                 
                 st.subheader("② 個人スタッツ ＆ 分析グラフ")
@@ -1292,7 +1377,7 @@ def draw_season_tab():
                 
                 st.divider()
                 
-                # --- ③ シーズン累計：アシスト・ホットライン解析 (関係者のみ・枠線つき版) ---
+                # --- ③ シーズン累計：アシスト・ホットライン解析 ---
                 st.subheader("③ 🤝 アシスト・ホットライン解析 (シーズン累計)")
                 st.write(f"「誰が、誰にパスを出して得点に繋がったか」のシーズン累計です。色が濃いほど強力なコンビです！")
                 
@@ -1352,7 +1437,7 @@ def draw_season_tab():
                     
                 st.divider()
 
-                # --- ④ クォーター別 チーム分析 ---
+                # --- ④ クォーター別 チーム分析 (シーズン累計) ---
                 st.subheader("④ ⏱️ クォーター別 チーム分析 (シーズン累計)")
                 st.write(f"「どのクォーターが得意か、どのクォーターで崩れやすいか」の傾向を確認できます。")
                 
