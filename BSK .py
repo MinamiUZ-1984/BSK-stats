@@ -13,7 +13,7 @@ import urllib.parse
 # ==========================================
 # ページ設定
 # ==========================================
-st.set_page_config(page_title="松浪ミニバス分析 V64.3", layout="centered")
+st.set_page_config(page_title="松浪ミニバス分析 V65.0", layout="centered")
 
 # ★ここに実際のアプリのURLを入力してください★
 APP_URL = "https://your-app-url.streamlit.app" 
@@ -61,7 +61,7 @@ if 'read_only' not in st.session_state:
     st.session_state.read_only = False
 
 if 'room_key' not in st.session_state:
-    st.title("🏀 松浪ミニバス分析 V64.3")
+    st.title("🏀 松浪ミニバス分析 V65.0")
     st.info("💡 **使用者名** を入力してスタートしてください。")
     room_input = st.text_input("使用者名（例：〇〇父 など）")
     
@@ -895,11 +895,9 @@ def draw_report_body(df_history, home_name, away_name):
                 
                 t_ast = pd.DataFrame(ast_records)
                 
-                # 関係のある選手（パサーかシューターとして記録がある選手）だけを抽出し、背番号順に並べ替え
                 involved_raw = set(t_ast['パサー']).union(set(t_ast['シューター']))
                 involved_players = sorted(list(involved_raw), key=safe_sort_key)
                 
-                # 関係のある選手だけでマトリックス（星取表の土台）を作成
                 full_grid = pd.DataFrame([(p, s) for p in involved_players for s in involved_players], columns=['パサー', 'シューター'])
                 
                 ast_counts = t_ast.groupby(['パサー', 'シューター']).size().reset_index(name='回数')
@@ -910,7 +908,6 @@ def draw_report_body(df_history, home_name, away_name):
                     y=alt.Y('パサー:N', title='パサー (パスを出した人)', scale=alt.Scale(domain=involved_players), axis=alt.Axis(labelOverlap=False))
                 )
                 
-                # 枠線をつけて、回数が0の場合は透明にする（グレーの枠だけ残る）
                 heatmap = base.mark_rect(stroke='lightgray', strokeWidth=1).encode(
                     color=alt.condition(
                         alt.datum.回数 > 0,
@@ -922,7 +919,6 @@ def draw_report_body(df_history, home_name, away_name):
                 max_count = full_grid['回数'].max()
                 threshold = max_count / 2 if max_count > 0 else 0
                 
-                # 回数が0の場合は数字を出さない
                 text = base.mark_text(baseline='middle').encode(
                     text=alt.condition(alt.datum.回数 > 0, alt.Text('回数:Q'), alt.value('')),
                     color=alt.condition(
@@ -932,14 +928,12 @@ def draw_report_body(df_history, home_name, away_name):
                     )
                 )
                 
-                # 関係する人数に合わせて高さを動的に調整（最低150px）
                 chart_height = max(150, len(involved_players) * 30 + 50)
                 st.altair_chart((heatmap + text).properties(height=chart_height), use_container_width=True)
             else:
                 st.caption("アシスト記録なし")
                 
     if not ast_df.empty:
-        # アシスト詳細リストのデータ作成
         ast_details = []
         for idx, ast_row in ast_df.iterrows():
             ast_p = str(ast_row['名前']).replace('番', '')
@@ -1317,11 +1311,9 @@ def draw_season_tab():
                         
                     ast_table_season = pd.DataFrame(ast_records_season)
                     
-                    # 関係のある選手（パサーかシューター）だけを抽出し、背番号順に並べ替え
                     involved_raw_s = set(ast_table_season['パサー']).union(set(ast_table_season['シューター']))
                     involved_players_s = sorted(list(involved_raw_s), key=safe_sort_key)
                     
-                    # 関係のある選手だけでマトリックス（星取表の土台）を作成
                     full_grid_s = pd.DataFrame([(p, s) for p in involved_players_s for s in involved_players_s], columns=['パサー', 'シューター'])
                     
                     ast_counts_season = ast_table_season.groupby(['パサー', 'シューター']).size().reset_index(name='回数')
@@ -1332,7 +1324,6 @@ def draw_season_tab():
                         y=alt.Y('パサー:N', title='パサー (パスを出した人)', scale=alt.Scale(domain=involved_players_s), axis=alt.Axis(labelOverlap=False))
                     )
                     
-                    # 枠線をつけて、回数が0の場合は透明（白っぽく）する
                     heatmap_s = base_s.mark_rect(stroke='lightgray', strokeWidth=1).encode(
                         color=alt.condition(
                             alt.datum.回数 > 0,
@@ -1344,7 +1335,6 @@ def draw_season_tab():
                     max_count_s = full_grid_s['回数'].max()
                     threshold_s = max_count_s / 2 if max_count_s > 0 else 0
                     
-                    # 回数が0の場合は数字を出さない（空欄にする）
                     text_s = base_s.mark_text(baseline='middle').encode(
                         text=alt.condition(alt.datum.回数 > 0, alt.Text('回数:Q'), alt.value('')),
                         color=alt.condition(
@@ -1354,12 +1344,90 @@ def draw_season_tab():
                         )
                     )
                     
-                    # 人数に合わせて高さを動的に調整
                     chart_height_s = max(200, len(involved_players_s) * 30 + 50)
                     st.altair_chart((heatmap_s + text_s).properties(height=chart_height_s), use_container_width=True)
 
                 else:
                     st.caption("アシスト記録がありません")
+                    
+                st.divider()
+
+                # --- ④ クォーター別 チーム分析 ---
+                st.subheader("④ ⏱️ クォーター別 チーム分析 (シーズン累計)")
+                st.write(f"「どのクォーターが得意か、どのクォーターで崩れやすいか」の傾向を確認できます。")
+                
+                q_list = ["1Q", "2Q", "3Q", "4Q", "OT"]
+                q_rows = []
+                
+                for q in q_list:
+                    q_df = h_season_df[h_season_df['Q'] == q]
+                    if q_df.empty: 
+                        continue
+                    
+                    q_opp_df = all_df[(all_df['チーム'] != target_team) & (all_df['Q'] == q)]
+                    
+                    pts = q_df['点数'].sum()
+                    opp_pts = q_opp_df['点数'].sum()
+                    pm = pts - opp_pts
+                    
+                    m2i = len(q_df[(q_df['項目']=='2P') & (q_df['結果']=='成功')])
+                    m2a = len(q_df[q_df['項目']=='2P'])
+                    m3i = len(q_df[(q_df['項目']=='3P') & (q_df['結果']=='成功')])
+                    m3a = len(q_df[q_df['項目']=='3P'])
+                    fi = len(q_df[(q_df['項目']=='FT') & (q_df['結果']=='成功')])
+                    fa = len(q_df[q_df['項目']=='FT'])
+                    
+                    orb = len(q_df[q_df['項目']=='OR'])
+                    drb = len(q_df[q_df['項目']=='DR'])
+                    
+                    ast = len(q_df[q_df['項目']=='AST'])
+                    stl = len(q_df[q_df['項目']=='STL'])
+                    to = len(q_df[q_df['項目']=='TO'])
+                    foul = len(q_df[q_df['項目']=='Foul'])
+                    
+                    q_rows.append({
+                        'Q': q,
+                        '得点': pts,
+                        '失点': opp_pts,
+                        '+/-': f"{pm:+}",
+                        'FG(M/A)': fmt_stat(m2i+m3i, m2a+m3a),
+                        '3P(M/A)': fmt_stat(m3i, m3a),
+                        'FT(M/A)': fmt_stat(fi, fa),
+                        'REB(D/O)': f"{drb+orb} ({drb}/{orb})",
+                        'As': ast,
+                        'St': stl,
+                        'TO': to,
+                        'F': foul
+                    })
+                
+                if q_rows:
+                    q_stats_df = pd.DataFrame(q_rows)
+                    st.dataframe(q_stats_df.set_index('Q'), use_container_width=True)
+                    
+                    # グラフ化：得点・失点の比較
+                    plot_df_pts = pd.melt(q_stats_df, id_vars=['Q'], value_vars=['得点', '失点'], var_name='種類', value_name='点数')
+                    
+                    base_q = alt.Chart(plot_df_pts).encode(
+                        x=alt.X('Q:N', sort=q_list, title='クォーター', axis=alt.Axis(labelAngle=0)),
+                        xOffset='種類:N',
+                        y=alt.Y('点数:Q', title='総点数'),
+                        color=alt.Color('種類:N', scale=alt.Scale(domain=['得点', '失点'], range=['#3498db', '#e74c3c']), legend=alt.Legend(title="", orient="bottom"))
+                    )
+                    
+                    bar_q = base_q.mark_bar()
+                    
+                    text_q = base_q.mark_text(
+                        align='center',
+                        baseline='bottom',
+                        dy=-3,
+                        fontWeight='bold',
+                        fontSize=12
+                    ).encode(
+                        text='点数:Q'
+                    )
+                    
+                    st.altair_chart((bar_q + text_q).properties(height=250), use_container_width=True)
+
             else:
                 st.warning(f"アップロードされたファイルに「{target_team}」のデータが見つかりません。上の入力欄の名前を確認してください。")
 
