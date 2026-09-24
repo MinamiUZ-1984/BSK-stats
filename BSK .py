@@ -13,7 +13,7 @@ import urllib.parse
 # ==========================================
 # ページ設定
 # ==========================================
-st.set_page_config(page_title="松浪ミニバス分析 V69.0", layout="centered")
+st.set_page_config(page_title="松浪ミニバス分析 V69.1", layout="centered")
 
 # ★ここに実際のアプリのURLを入力してください★
 APP_URL = "https://your-app-url.streamlit.app" 
@@ -61,7 +61,7 @@ if 'read_only' not in st.session_state:
     st.session_state.read_only = False
 
 if 'room_key' not in st.session_state:
-    st.title("🏀 松浪ミニバス分析 V69.0")
+    st.title("🏀 松浪ミニバス分析 V69.1")
     st.info("💡 **使用者名** を入力してスタートしてください。")
     room_input = st.text_input("使用者名（例：〇〇父 など）")
     
@@ -725,7 +725,6 @@ def get_season_rotation_table(df_hist, p_list, team_name):
         rows.append(row_data)
     return pd.DataFrame(rows)
 
-# スタイリング適用関数
 def color_q(val, is_home):
     if val == '〇':
         return 'background-color: #e6f2ff; color: #2980b9; font-weight: bold;' if is_home else 'background-color: #ffe6e6; color: #c0392b; font-weight: bold;'
@@ -752,7 +751,7 @@ def draw_report_body(df_history, home_name, away_name):
     try:
         rep_qs = df_history.groupby(['チーム', 'Q'])['点数'].sum().unstack(fill_value=0).reindex(index=[home_name, away_name], columns=["1Q", "2Q", "3Q", "4Q", "OT"], fill_value=0)
         rep_qs['Total'] = rep_qs.sum(axis=1)
-        st.table(rep_qs.astype(int))
+        st.dataframe(rep_qs.astype(int), use_container_width=True)
     except:
         pass
     
@@ -896,6 +895,7 @@ def draw_report_body(df_history, home_name, away_name):
             st.caption("データなし")
 
     st.header("3. 個人スタッツ")
+    st.info("💡 表の右上にある「全画面表示アイコン（矢印）」を押すと、スマホの画面いっぱいに拡大して見ることができます！")
     
     all_h = get_team_players(df_history, home_name, True)
     all_a = get_team_players(df_history, away_name, False)
@@ -999,9 +999,9 @@ def draw_report_body(df_history, home_name, away_name):
         return pd.DataFrame(rows)
     
     st.write(f"🔵 **{home_name}**")
-    st.table(get_full_stats(home_name, all_h).drop(columns='Team').set_index('#'))
+    st.dataframe(get_full_stats(home_name, all_h).drop(columns='Team').set_index('#'), use_container_width=True)
     st.write(f"🔴 **{away_name}**")
-    st.table(get_full_stats(away_name, all_a).drop(columns='Team').set_index('#'))
+    st.dataframe(get_full_stats(away_name, all_a).drop(columns='Team').set_index('#'), use_container_width=True)
     
     st.divider()
     
@@ -1335,7 +1335,7 @@ def draw_season_tab():
                 
                 if target_scope == "チーム全体":
                     target_df = h_season_df.copy()
-                    scope_full_df = h_season_df.copy() # Q別パフォーマンス用
+                    scope_full_df = h_season_df.copy()
                 else:
                     target_df = h_season_df[h_season_df['名前'] == f"{target_scope}番"].copy()
                     scope_full_df = h_season_df[h_season_df['名前'] == f"{target_scope}番"].copy()
@@ -1431,7 +1431,6 @@ def draw_season_tab():
                         '右角(ﾐﾄﾞﾙ)': get_2p_stat(pdf, ['右角'])
                     })
                     
-                # --- NEW: 時系列スタッツ表のTotal行追加 ---
                 if ts_rows:
                     m2i_t = len(target_df[(target_df['項目']=='2P') & (target_df['結果']=='成功')])
                     m2a_t = len(target_df[target_df['項目']=='2P'])
@@ -1499,7 +1498,6 @@ def draw_season_tab():
                 else:
                     st.info("選択された条件（選手・Q）に該当するプレイ記録がありません。")
                 
-                # --- NEW: 📊 クォーター別 パフォーマンスグラフ ---
                 st.markdown(f"##### 📊 クォーター別 パフォーマンス ({target_scope})")
                 perf_q_cols = ["1Q", "2Q", "3Q", "4Q", "OT"]
                 perf_rows = []
