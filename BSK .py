@@ -15,7 +15,7 @@ import datetime
 st.set_page_config(page_title="松浪ミニバス分析 V70.0", layout="centered")
 
 # ★ここに実際のアプリのURLを入力してください★
-APP_URL = "https://your-app-url.streamlit.app" 
+APP_URL = "https://bsk-stats.streamlit.app/" 
 
 # ==========================================
 # CSS注入（デザイン設定）
