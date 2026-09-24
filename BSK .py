@@ -13,7 +13,7 @@ import urllib.parse
 # ==========================================
 # ページ設定
 # ==========================================
-st.set_page_config(page_title="松浪ミニバス分析 V69.1", layout="centered")
+st.set_page_config(page_title="松浪ミニバス分析 V69.2", layout="centered")
 
 # ★ここに実際のアプリのURLを入力してください★
 APP_URL = "https://your-app-url.streamlit.app" 
@@ -43,6 +43,9 @@ st.markdown("""
     div[data-testid="stTable"] table { font-size: 9px !important; width: 100% !important; }
     div[data-testid="stTable"] th, div[data-testid="stTable"] td { padding: 2px 1px !important; line-height: 1.1 !important; }
     
+    /* データフレーム(全画面表)の文字サイズ調整用ハック */
+    [data-testid="stDataFrame"] { font-size: 11px !important; }
+    
     .court-zone { display: inline-block; font-size: 12px; font-weight: bold; color: white; background-color: #d35400; padding: 3px 12px; border-radius: 15px; margin-top: 5px; margin-bottom: 8px; }
     .center-panel-title { text-align:center; font-size:14px; font-weight:bold; color:#fff; background:#2c3e50; padding:6px; border-radius:5px 5px 0 0; margin-bottom: 0px; }
     
@@ -61,7 +64,7 @@ if 'read_only' not in st.session_state:
     st.session_state.read_only = False
 
 if 'room_key' not in st.session_state:
-    st.title("🏀 松浪ミニバス分析 V69.1")
+    st.title("🏀 松浪ミニバス分析 V69.2")
     st.info("💡 **使用者名** を入力してスタートしてください。")
     room_input = st.text_input("使用者名（例：〇〇父 など）")
     
@@ -895,7 +898,7 @@ def draw_report_body(df_history, home_name, away_name):
             st.caption("データなし")
 
     st.header("3. 個人スタッツ")
-    st.info("💡 表の右上にある「全画面表示アイコン（矢印）」を押すと、スマホの画面いっぱいに拡大して見ることができます！")
+    st.info("💡 表の右上にある「全画面表示アイコン（斜め矢印）」を押すと、スマホの画面いっぱいに拡大して見ることができます！")
     
     all_h = get_team_players(df_history, home_name, True)
     all_a = get_team_players(df_history, away_name, False)
@@ -999,9 +1002,12 @@ def draw_report_body(df_history, home_name, away_name):
         return pd.DataFrame(rows)
     
     st.write(f"🔵 **{home_name}**")
-    st.dataframe(get_full_stats(home_name, all_h).drop(columns='Team').set_index('#'), use_container_width=True)
+    df_h_stats = get_full_stats(home_name, all_h).drop(columns='Team').set_index('#')
+    st.dataframe(df_h_stats.style.set_properties(**{'font-size': '11px'}), use_container_width=True)
+    
     st.write(f"🔴 **{away_name}**")
-    st.dataframe(get_full_stats(away_name, all_a).drop(columns='Team').set_index('#'), use_container_width=True)
+    df_a_stats = get_full_stats(away_name, all_a).drop(columns='Team').set_index('#')
+    st.dataframe(df_a_stats.style.set_properties(**{'font-size': '11px'}), use_container_width=True)
     
     st.divider()
     
@@ -1014,11 +1020,11 @@ def draw_report_body(df_history, home_name, away_name):
     rc1, rc2 = st.columns(2)
     with rc1:
         st.write(f"🔵 **{home_name}**")
-        styled_rot_h = rot_h.style.map(lambda x: color_q(x, True), subset=["1Q", "2Q", "3Q", "4Q", "OT"]) if hasattr(rot_h.style, 'map') else rot_h.style.applymap(lambda x: color_q(x, True), subset=["1Q", "2Q", "3Q", "4Q", "OT"])
+        styled_rot_h = rot_h.style.map(lambda x: color_q(x, True), subset=["1Q", "2Q", "3Q", "4Q", "OT"]).set_properties(**{'font-size': '11px'}) if hasattr(rot_h.style, 'map') else rot_h.style.applymap(lambda x: color_q(x, True), subset=["1Q", "2Q", "3Q", "4Q", "OT"]).set_properties(**{'font-size': '11px'})
         st.dataframe(styled_rot_h, hide_index=True, use_container_width=True)
     with rc2:
         st.write(f"🔴 **{away_name}**")
-        styled_rot_a = rot_a.style.map(lambda x: color_q(x, False), subset=["1Q", "2Q", "3Q", "4Q", "OT"]) if hasattr(rot_a.style, 'map') else rot_a.style.applymap(lambda x: color_q(x, False), subset=["1Q", "2Q", "3Q", "4Q", "OT"])
+        styled_rot_a = rot_a.style.map(lambda x: color_q(x, False), subset=["1Q", "2Q", "3Q", "4Q", "OT"]).set_properties(**{'font-size': '11px'}) if hasattr(rot_a.style, 'map') else rot_a.style.applymap(lambda x: color_q(x, False), subset=["1Q", "2Q", "3Q", "4Q", "OT"]).set_properties(**{'font-size': '11px'})
         st.dataframe(styled_rot_a, hide_index=True, use_container_width=True)
 
     st.divider()
@@ -1125,7 +1131,7 @@ def draw_report_body(df_history, home_name, away_name):
                 return [f'background-color: #ffe6e6'] * len(row)
             return [''] * len(row)
             
-        styled_df = disp_df.style.apply(color_bg, axis=1)
+        styled_df = disp_df.style.apply(color_bg, axis=1).set_properties(**{'font-size': '11px'})
         st.dataframe(styled_df, hide_index=True, use_container_width=True)
                     
     else:
@@ -1140,7 +1146,7 @@ def draw_report_body(df_history, home_name, away_name):
     st.divider()
     
     st.header("6. 📜 全プレイ履歴 (生データ)")
-    st.dataframe(df_history.iloc[::-1], use_container_width=True)
+    st.dataframe(df_history.iloc[::-1].style.set_properties(**{'font-size': '11px'}), use_container_width=True)
 
 # ==========================================
 # シーズン成績タブ描画
@@ -1316,13 +1322,14 @@ def draw_season_tab():
                     'TO': tto
                 })
                 
-                st.dataframe(pd.DataFrame(rows).set_index('#'), use_container_width=True)
+                df_season_stats = pd.DataFrame(rows).set_index('#')
+                st.dataframe(df_season_stats.style.set_properties(**{'font-size': '11px'}), use_container_width=True)
                 
                 st.markdown("##### 🏃 出場クォーター数 (累計)")
                 st.caption("※ 各クォーターに何試合出場したかを表示します。（オンコート記録またはプレイ記録で判定）")
                 
                 rot_season = get_season_rotation_table(all_df, s_players, target_team)
-                styled_rot_season = rot_season.style.map(color_season_rot, subset=["1Q", "2Q", "3Q", "4Q", "OT"]) if hasattr(rot_season.style, 'map') else rot_season.style.applymap(color_season_rot, subset=["1Q", "2Q", "3Q", "4Q", "OT"])
+                styled_rot_season = rot_season.style.map(color_season_rot, subset=["1Q", "2Q", "3Q", "4Q", "OT"]).set_properties(**{'font-size': '11px'}) if hasattr(rot_season.style, 'map') else rot_season.style.applymap(color_season_rot, subset=["1Q", "2Q", "3Q", "4Q", "OT"]).set_properties(**{'font-size': '11px'})
                 st.dataframe(styled_rot_season, hide_index=True, use_container_width=True)
                 
                 st.divider()
@@ -1493,7 +1500,7 @@ def draw_season_tab():
                 ts_df = pd.DataFrame(ts_rows)
                 
                 if not ts_df.empty and '試合名' in ts_df.columns:
-                    styled_ts_df = ts_df.set_index('試合名').style.apply(highlight_total_row, axis=1)
+                    styled_ts_df = ts_df.set_index('試合名').style.apply(highlight_total_row, axis=1).set_properties(**{'font-size': '11px'})
                     st.dataframe(styled_ts_df, use_container_width=True)
                 else:
                     st.info("選択された条件（選手・Q）に該当するプレイ記録がありません。")
